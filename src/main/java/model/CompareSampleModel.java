@@ -1,31 +1,32 @@
 package model;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Set;
+
 /**
  * 鉴权比较样本数据模型
- * 封装一条完整的鉴权比较记录，包含原始请求、低权限请求和未授权请求的报文数据。
+ * 封装一条完整的鉴权比较记录，支持动态数量的鉴权对象。
+ * 使用 Map 存储各鉴权对象的报文数据（如 Original / Unauthorized / User1 / User2 ...）。
  */
 public class CompareSampleModel {
 
     private int id;
     private String method;
     private String url;
-    private MessageDataModel original;
-    private MessageDataModel lowPrivilege;
-    private MessageDataModel unauth;
+
+    /** 鉴权对象名称 -> 报文数据的映射 */
+    private final Map<String, MessageDataModel> messageDataMap;
 
     public CompareSampleModel() {
+        this.messageDataMap = new LinkedHashMap<>();
     }
 
-    public CompareSampleModel(int id, String method, String url,
-                              MessageDataModel original,
-                              MessageDataModel lowPrivilege,
-                              MessageDataModel unauth) {
+    public CompareSampleModel(int id, String method, String url) {
         this.id = id;
         this.method = method;
         this.url = url;
-        this.original = original;
-        this.lowPrivilege = lowPrivilege;
-        this.unauth = unauth;
+        this.messageDataMap = new LinkedHashMap<>();
     }
 
     /** 获取记录编号 */
@@ -58,60 +59,53 @@ public class CompareSampleModel {
         this.url = url;
     }
 
-    /** 获取原始请求报文数据 */
-    public MessageDataModel getOriginal() {
-        return original;
-    }
-
-    /** 设置原始请求报文数据 */
-    public void setOriginal(MessageDataModel original) {
-        this.original = original;
-    }
-
-    /** 获取低权限请求报文数据 */
-    public MessageDataModel getLowPrivilege() {
-        return lowPrivilege;
-    }
-
-    /** 设置低权限请求报文数据 */
-    public void setLowPrivilege(MessageDataModel lowPrivilege) {
-        this.lowPrivilege = lowPrivilege;
-    }
-
-    /** 获取未授权请求报文数据 */
-    public MessageDataModel getUnauth() {
-        return unauth;
-    }
-
-    /** 设置未授权请求报文数据 */
-    public void setUnauth(MessageDataModel unauth) {
-        this.unauth = unauth;
+    /**
+     * 存储指定鉴权对象的报文数据
+     *
+     * @param authName 鉴权对象名称（如 "Original" / "Unauthorized" / "User1"）
+     * @param data     报文数据
+     */
+    public void putMessageData(String authName, MessageDataModel data) {
+        messageDataMap.put(authName, data);
     }
 
     /**
-     * 获取指定鉴权类型的包长度
+     * 获取指定鉴权对象的报文数据
      *
-     * @param type 鉴权类型: "original" / "lowPrivilege" / "unauth"
+     * @param authName 鉴权对象名称
+     * @return 报文数据，不存在返回 null
+     */
+    public MessageDataModel getMessageData(String authName) {
+        return messageDataMap.get(authName);
+    }
+
+    /**
+     * 移除指定鉴权对象的报文数据
+     *
+     * @param authName 鉴权对象名称
+     */
+    public void removeMessageData(String authName) {
+        messageDataMap.remove(authName);
+    }
+
+    /**
+     * 获取所有鉴权对象名称
+     *
+     * @return 鉴权对象名称集合
+     */
+    public Set<String> getAuthNames() {
+        return Set.copyOf(messageDataMap.keySet());
+    }
+
+    /**
+     * 获取指定鉴权对象的包长度
+     *
+     * @param authName 鉴权对象名称
      * @return 包长度，无数据返回 0
      */
-    public int getLengthByType(String type) {
-        MessageDataModel data = getDataByType(type);
+    public int getLengthByAuthName(String authName) {
+        MessageDataModel data = messageDataMap.get(authName);
         return data != null ? data.getLength() : 0;
-    }
-
-    /**
-     * 根据类型获取对应的 MessageDataModel
-     *
-     * @param type 鉴权类型
-     * @return 对应的报文数据，不存在返回 null
-     */
-    public MessageDataModel getDataByType(String type) {
-        return switch (type) {
-            case "original" -> original;
-            case "lowPrivilege" -> lowPrivilege;
-            case "unauth" -> unauth;
-            default -> null;
-        };
     }
 }
 

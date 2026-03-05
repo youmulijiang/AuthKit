@@ -1,22 +1,266 @@
 import burp.api.montoya.BurpExtension;
 import burp.api.montoya.MontoyaApi;
+import controller.AuthController;
+import core.HttpRequestHandler;
+import core.RequestReplayService;
+import core.TextDiffService;
+import core.processor.HeaderReplaceProcessor;
+import core.processor.ParamReplaceProcessor;
+import core.processor.ProcessorChain;
+import core.processor.RequestProcessor;
+import model.AuthUserModel;
+import model.CompareSampleModel;
+import model.ConfigModel;
+import model.MessageDataModel;
 import utils.ApiUtils;
 import utils.LogUtils;
 import view.MainPanel;
+import view.component.*;
+
+import javax.swing.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class AuthKit implements BurpExtension {
+
+    private ExecutorService executor;
+
     @Override
     public void initialize(MontoyaApi montoyaApi) {
         // 初始化全局 API 访问点
         ApiUtils.INSTANCE.init(montoyaApi);
-
-        // 设置插件名称
         montoyaApi.extension().setName("AuthKit");
 
-        // 注册主面板为 Burp Suite Tab
+        // 创建线程池
+        executor = Executors.newFixedThreadPool(3);
+
+        // 创建 UI
         MainPanel mainPanel = new MainPanel();
         montoyaApi.userInterface().registerSuiteTab("AuthKit", mainPanel);
 
+        // 创建配置模型
+        ConfigModel configModel = new ConfigModel();
+
+        // 创建处理器链
+        List<RequestProcessor> processors = List.of(
+                new HeaderReplaceProcessor(),
+                new ParamReplaceProcessor()
+        );
+        ProcessorChain processorChain = new ProcessorChain(processors);
+
+        // 创建核心服务
+        RequestReplayService replayService = new RequestReplayService(
+                montoyaApi.http(), processorChain);
+        TextDiffService diffService = new TextDiffService();
+
+        // 创建控制器
+        AuthController controller = new AuthController(configModel, replayService, diffService);
+
+        // 绑定 UI → ConfigModel 同步
+        bindConfigSync(mainPanel.getPanelConfiguration(), configModel);
+
+        // 绑定 Clear 按钮
+        mainPanel.getPanelConfiguration().getBtnClearTable().addActionListener(e -> {
+            controller.clearAll();
+            mainPanel.getPanelDataTable().clearAll();
+            mainPanel.getPanelMetadataTable().clearAll();
+            mainPanel.getPanelCompare().clearAll();
+        });
+
+        // 绑定 DataTable 行选中事件 → 更新 MetadataTable + ComparePanel
+        bindTableSelection(mainPanel, controller);
+
+        // 创建并注册 HttpRequestHandler
+        HttpRequestHandler httpHandler = new HttpRequestHandler(configModel, (request, response) -> {
+            executor.submit(() -> {
+                try {
+                    // 构建原始报文数据
+                    MessageDataModel originalData = new MessageDataModel(
+                            request.toString(), response.toString(),
+                            response.statusCode(),
+                            response.toByteArray().length(),
+                            core.HashService.md5(response.toByteArray().getBytes())
+                    );
+
+                    // 从 UserPanel 收集启用的用户配置
+                    List<AuthUserModel> users = collectUsers(mainPanel.getPanelUser());
+
+                    // 处理请求
+                    CompareSampleModel sample = controller.processRequest(
+                            request, response, originalData, users);
+
+                    // 更新 UI（在 EDT 线程）
+                    SwingUtilities.invokeLater(() -> updateUI(mainPanel, sample));
+                } catch (Exception ex) {
+                    LogUtils.INSTANCE.error("Error processing request", ex);
+                }
+            });
+        });
+        montoyaApi.http().registerHttpHandler(httpHandler);
+
+        // 注册插件卸载时清理线程池
+        montoyaApi.extension().registerUnloadingHandler(() -> {
+            executor.shutdownNow();
+            LogUtils.INSTANCE.info("AuthKit 插件已卸载");
+        });
+
         LogUtils.INSTANCE.info("AuthKit 插件加载成功");
+    }
+
+    /**
+     * 绑定 ConfigurationPanel UI 控件变化 → ConfigModel 同步
+     */
+    private void bindConfigSync(ConfigurationPanel panel, ConfigModel model) {
+        panel.getCheckBoxEnabled().addActionListener(e ->
+                model.setEnabled(panel.getCheckBoxEnabled().isSelected()));
+        panel.getCheckBoxDomainFilter().addActionListener(e ->
+                model.setDomainFilterEnabled(panel.getCheckBoxDomainFilter().isSelected()));
+        panel.getCheckBoxMethodFilter().addActionListener(e ->
+                model.setMethodFilterEnabled(panel.getCheckBoxMethodFilter().isSelected()));
+        panel.getCheckBoxPathFilter().addActionListener(e ->
+                model.setPathFilterEnabled(panel.getCheckBoxPathFilter().isSelected()));
+        panel.getCheckBoxStatusCodeFilter().addActionListener(e ->
+                model.setStatusCodeFilterEnabled(panel.getCheckBoxStatusCodeFilter().isSelected()));
+
+        // 文本区域使用 FocusListener 在失焦时同步
+        panel.getTextAreaDomain().addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override
+            public void focusLost(java.awt.event.FocusEvent e) {
+                model.setRawDomains(panel.getTextAreaDomain().getText());
+            }
+        });
+        panel.getTextFieldMethod().addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override
+            public void focusLost(java.awt.event.FocusEvent e) {
+                model.setRawFilterMethods(panel.getTextFieldMethod().getText());
+            }
+        });
+        panel.getTextAreaPath().addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override
+            public void focusLost(java.awt.event.FocusEvent e) {
+                model.setRawFilterPaths(panel.getTextAreaPath().getText());
+            }
+        });
+        panel.getTextFieldStatusCode().addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override
+            public void focusLost(java.awt.event.FocusEvent e) {
+                model.setRawFilterStatusCodes(panel.getTextFieldStatusCode().getText());
+            }
+        });
+        panel.getTextAreaAuthHeaders().addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override
+            public void focusLost(java.awt.event.FocusEvent e) {
+                model.setRawAuthHeaders(panel.getTextAreaAuthHeaders().getText());
+            }
+        });
+
+        // 初始同步默认值
+        model.setEnabled(panel.getCheckBoxEnabled().isSelected());
+        model.setDomainFilterEnabled(panel.getCheckBoxDomainFilter().isSelected());
+        model.setMethodFilterEnabled(panel.getCheckBoxMethodFilter().isSelected());
+        model.setPathFilterEnabled(panel.getCheckBoxPathFilter().isSelected());
+        model.setStatusCodeFilterEnabled(panel.getCheckBoxStatusCodeFilter().isSelected());
+        model.setRawFilterMethods(panel.getTextFieldMethod().getText());
+        model.setRawFilterStatusCodes(panel.getTextFieldStatusCode().getText());
+        model.setRawAuthHeaders(panel.getTextAreaAuthHeaders().getText());
+    }
+
+    /**
+     * 绑定 DataTable 行选中事件
+     */
+    private void bindTableSelection(MainPanel mainPanel, AuthController controller) {
+        mainPanel.getPanelDataTable().getTableData().getSelectionModel()
+                .addListSelectionListener(e -> {
+                    if (e.getValueIsAdjusting()) {
+                        return;
+                    }
+                    int selectedRow = mainPanel.getPanelDataTable().getSelectedRow();
+                    if (selectedRow < 0) {
+                        return;
+                    }
+                    CompareSampleModel sample = controller.getSample(selectedRow);
+                    if (sample == null) {
+                        return;
+                    }
+                    updateMetadataTable(mainPanel.getPanelMetadataTable(), sample);
+                    updateComparePanel(mainPanel.getPanelCompare(), sample);
+                });
+    }
+
+    /**
+     * 从 UserPanel 收集所有用户配置
+     */
+    private List<AuthUserModel> collectUsers(UserPanel userPanel) {
+        List<AuthUserModel> users = new ArrayList<>();
+        Map<String, AuthUserConfigPanel> panels = userPanel.getUserPanels();
+        for (Map.Entry<String, AuthUserConfigPanel> entry : panels.entrySet()) {
+            AuthUserConfigPanel configPanel = entry.getValue();
+            AuthUserModel user = new AuthUserModel(configPanel.getUserName());
+            user.setEnabled(configPanel.isUserEnabled());
+            user.setRawHeaders(configPanel.getTextAreaAuthHeaders().getText());
+            user.setRawParams(configPanel.getTextAreaParamReplacement().getText());
+            users.add(user);
+        }
+        return users;
+    }
+
+    /**
+     * 更新 UI：添加新行到 DataTable
+     */
+    private void updateUI(MainPanel mainPanel, CompareSampleModel sample) {
+        DataTablePanel dataTable = mainPanel.getPanelDataTable();
+        List<String> authColumns = dataTable.getAuthColumns();
+
+        // 构建行数据: # / Method / URL / 各鉴权对象的包长度
+        int totalColumns = 3 + authColumns.size();
+        Object[] row = new Object[totalColumns];
+        row[0] = sample.getId();
+        row[1] = sample.getMethod();
+        row[2] = sample.getUrl();
+        for (int i = 0; i < authColumns.size(); i++) {
+            row[3 + i] = sample.getLengthByAuthName(authColumns.get(i));
+        }
+        dataTable.addRow(row);
+    }
+
+    /**
+     * 更新 MetadataTable
+     */
+    private void updateMetadataTable(MetadataTablePanel metadataTable, CompareSampleModel sample) {
+        for (String authName : metadataTable.getAuthRows()) {
+            MessageDataModel data = sample.getMessageData(authName);
+            if (data != null) {
+                metadataTable.updateRow(authName, data.getStatusCode(),
+                        data.getLength(), data.getHash(), 0);
+            }
+        }
+    }
+
+    /**
+     * 更新 ComparePanel
+     */
+    private void updateComparePanel(ComparePanel comparePanel, CompareSampleModel sample) {
+        Map<String, MessagePanel> sourcePanels = comparePanel.getSourcePanels();
+        Map<String, MessagePanel> targetPanels = comparePanel.getTargetPanels();
+
+        for (Map.Entry<String, MessagePanel> entry : sourcePanels.entrySet()) {
+            MessageDataModel data = sample.getMessageData(entry.getKey());
+            if (data != null) {
+                entry.getValue().setContent(data.getRequest(), data.getResponse());
+            } else {
+                entry.getValue().clearContent();
+            }
+        }
+        for (Map.Entry<String, MessagePanel> entry : targetPanels.entrySet()) {
+            MessageDataModel data = sample.getMessageData(entry.getKey());
+            if (data != null) {
+                entry.getValue().setContent(data.getRequest(), data.getResponse());
+            } else {
+                entry.getValue().clearContent();
+            }
+        }
     }
 }
