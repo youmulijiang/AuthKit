@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AugmentWebviewStateStore">
+    <option name="stateMap">
+      <map>
+        <entry key="CHAT_STATE" value="[[&quot;currentConversationId&quot;,&quot;pins&quot;,&quot;agentExecutionMode&quot;,&quot;isPanelCollapsed&quot;,&quot;displayedAnnouncements&quot;,&quot;conversations&quot;,&quot;a|0|1|2|3|4|5&quot;,&quot;__NEW_AGENT__&quot;,&quot;o|&quot;,&quot;manual&quot;,&quot;b|F&quot;,&quot;a|&quot;,&quot;a|7&quot;,&quot;id&quot;,&quot;createdAtIso&quot;,&quot;lastInteractedAtIso&quot;,&quot;selectedModelId&quot;,&quot;requestIds&quot;,&quot;isPinned&quot;,&quot;isShareable&quot;,&quot;extraData&quot;,&quot;personaType&quot;,&quot;rootTaskUuid&quot;,&quot;toolUseStates&quot;,&quot;chatHistory&quot;,&quot;feedbackStates&quot;,&quot;draftExchange&quot;,&quot;a|D|E|F|G|H|I|J|K|L|M|N|O|P|Q&quot;,&quot;2026-03-05T01:49:48.621Z&quot;,&quot;claude-opus-4-6&quot;,&quot;isAgentConversation&quot;,&quot;a|U&quot;,&quot;b|T&quot;,&quot;o|V|W&quot;,&quot;n|0&quot;,&quot;5ade4c4d-7a19-4f69-87ba-784bd8935fc7&quot;,&quot;request_id&quot;,&quot;uuid&quot;,&quot;chatItemType&quot;,&quot;status&quot;,&quot;fromTimestamp&quot;,&quot;toTimestamp&quot;,&quot;a|a|b|c|d|e|f&quot;,&quot;0e98da5f-704a-4409-acf8-ed5f243eccd4&quot;,&quot;1dd7e85e-708e-4b85-b053-a311339c4081&quot;,&quot;agentic-checkpoint-delimiter&quot;,&quot;success&quot;,&quot;n|VCxBHCD&quot;,&quot;o|g|h|i|j|k|Y|l&quot;,&quot;a|m&quot;,&quot;request_message&quot;,&quot;rich_text_json_repr&quot;,&quot;a|o|p|d&quot;,&quot;我现在要编写&quot;,&quot;type&quot;,&quot;content&quot;,&quot;a|s|t&quot;,&quot;doc&quot;,&quot;paragraph&quot;,&quot;text&quot;,&quot;a|s|x&quot;,&quot;o|y|x|r&quot;,&quot;a|z&quot;,&quot;o|u|w|10&quot;,&quot;a|11&quot;,&quot;o|u|v|12&quot;,&quot;draft&quot;,&quot;o|q|r|13|14&quot;,&quot;o|R|7|S|S|T|B|A|A|X|Y|Z|8|n|8|15&quot;,&quot;o|C|16&quot;,&quot;o|6|7|8|9|A|B|17&quot;],&quot;18&quot;]" />
+      </map>
+    </option>
+  </component>
+</project>
