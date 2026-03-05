@@ -19,7 +19,10 @@ public class MainPanel extends JPanel {
     private final ToolbarPanel panelToolbar;
     private final DataTablePanel panelDataTable;
     private final MetadataTablePanel panelMetadataTable;
+    private final JTabbedPane tabbedRight;
     private final ComparePanel panelCompare;
+    private final JPanel panelConfiguration;
+    private final JPanel panelUser;
 
     public MainPanel() {
         this.panelToolbar = new ToolbarPanel.Builder()
@@ -28,6 +31,9 @@ public class MainPanel extends JPanel {
         this.panelDataTable = new DataTablePanel.Builder().build();
         this.panelMetadataTable = new MetadataTablePanel.Builder().build();
         this.panelCompare = new ComparePanel.Builder().build();
+        this.panelConfiguration = new JPanel(new BorderLayout());
+        this.panelUser = new JPanel(new BorderLayout());
+        this.tabbedRight = new JTabbedPane();
         initLayout();
     }
 
@@ -47,11 +53,16 @@ public class MainPanel extends JPanel {
         splitLeftVertical.setResizeWeight(0.7);
         panelLeft.add(splitLeftVertical, BorderLayout.CENTER);
 
+        // 右侧面板: JTabbedPane（View / Configuration / User）
+        tabbedRight.addTab("View", panelCompare);
+        tabbedRight.addTab("Configuration", panelConfiguration);
+        tabbedRight.addTab("User", panelUser);
+
         // 左右水平分割
         JSplitPane splitMain = new JSplitPane(
                 JSplitPane.HORIZONTAL_SPLIT,
                 panelLeft,
-                panelCompare
+                tabbedRight
         );
         splitMain.setResizeWeight(0.45);
 
@@ -73,8 +84,23 @@ public class MainPanel extends JPanel {
         return panelMetadataTable;
     }
 
-    /** 获取报文对比面板 */
+    /** 获取右侧 TabbedPane */
+    public JTabbedPane getTabbedRight() {
+        return tabbedRight;
+    }
+
+    /** 获取报文对比面板（View 选项卡） */
     public ComparePanel getPanelCompare() {
         return panelCompare;
+    }
+
+    /** 获取配置面板（Configuration 选项卡） */
+    public JPanel getPanelConfiguration() {
+        return panelConfiguration;
+    }
+
+    /** 获取用户面板（User 选项卡） */
+    public JPanel getPanelUser() {
+        return panelUser;
     }
 }
