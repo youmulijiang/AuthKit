@@ -2,6 +2,7 @@ import burp.api.montoya.BurpExtension;
 import burp.api.montoya.MontoyaApi;
 import utils.ApiUtils;
 import utils.LogUtils;
+import view.MainPanel;
 
 public class AuthKit implements BurpExtension {
     @Override
@@ -11,6 +12,10 @@ public class AuthKit implements BurpExtension {
 
         // 设置插件名称
         montoyaApi.extension().setName("AuthKit");
+
+        // 注册主面板为 Burp Suite Tab
+        MainPanel mainPanel = new MainPanel();
+        montoyaApi.userInterface().registerSuiteTab("AuthKit", mainPanel);
 
         LogUtils.INSTANCE.info("AuthKit 插件加载成功");
     }
