@@ -1,9 +1,11 @@
 package view;
 
 import view.component.ComparePanel;
+import view.component.ConfigurationPanel;
 import view.component.DataTablePanel;
 import view.component.MetadataTablePanel;
 import view.component.ToolbarPanel;
+import view.component.UserPanel;
 
 import javax.swing.*;
 import java.awt.*;
@@ -21,8 +23,8 @@ public class MainPanel extends JPanel {
     private final MetadataTablePanel panelMetadataTable;
     private final JTabbedPane tabbedRight;
     private final ComparePanel panelCompare;
-    private final JPanel panelConfiguration;
-    private final JPanel panelUser;
+    private final ConfigurationPanel panelConfiguration;
+    private final UserPanel panelUser;
 
     public MainPanel() {
         this.panelToolbar = new ToolbarPanel.Builder()
@@ -31,10 +33,11 @@ public class MainPanel extends JPanel {
         this.panelDataTable = new DataTablePanel.Builder().build();
         this.panelMetadataTable = new MetadataTablePanel.Builder().build();
         this.panelCompare = new ComparePanel.Builder().build();
-        this.panelConfiguration = new JPanel(new BorderLayout());
-        this.panelUser = new JPanel(new BorderLayout());
+        this.panelConfiguration = new ConfigurationPanel.Builder().build();
+        this.panelUser = new UserPanel.Builder().build();
         this.tabbedRight = new JTabbedPane();
         initLayout();
+        bindEvents();
     }
 
     /** 初始化主面板布局 */
@@ -69,6 +72,19 @@ public class MainPanel extends JPanel {
         add(splitMain, BorderLayout.CENTER);
     }
 
+    /** 绑定事件：UserPanel 添加/删除用户时联动 DataTablePanel 和 MetadataTablePanel */
+    private void bindEvents() {
+        panelUser.onUserAdded(name -> {
+            panelDataTable.addAuthColumn(name);
+            panelMetadataTable.addAuthRow(name);
+        });
+
+        panelUser.onUserRemoved(name -> {
+            panelDataTable.removeAuthColumn(name);
+            panelMetadataTable.removeAuthRow(name);
+        });
+    }
+
     /** 获取工具栏面板 */
     public ToolbarPanel getPanelToolbar() {
         return panelToolbar;
@@ -95,12 +111,12 @@ public class MainPanel extends JPanel {
     }
 
     /** 获取配置面板（Configuration 选项卡） */
-    public JPanel getPanelConfiguration() {
+    public ConfigurationPanel getPanelConfiguration() {
         return panelConfiguration;
     }
 
     /** 获取用户面板（User 选项卡） */
-    public JPanel getPanelUser() {
+    public UserPanel getPanelUser() {
         return panelUser;
     }
 }

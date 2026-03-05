@@ -3,11 +3,13 @@ package view.component;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 元数据透视表面板
  * 位于左侧下方，以透视表形式展示选中记录的详细元数据。
- * 行: 原始对象 / 低权限对象 / 未授权对象
+ * 行: 鉴权对象（动态，默认 Original / Unauthorized，用户添加后追加）
  * 列: 鉴权对象 / 状态码 / 包长度 / Hash / 参数个数
  */
 public class MetadataTablePanel extends JPanel {
@@ -16,17 +18,21 @@ public class MetadataTablePanel extends JPanel {
             "鉴权对象", "状态码", "包长度", "Hash", "参数个数"
     };
 
-    private static final String[] ROW_LABELS = {
-            "原始对象", "低权限对象", "未授权对象"
-    };
+    /** 默认鉴权对象行 */
+    private static final String[] DEFAULT_AUTH_ROWS = {"Original", "Unauthorized"};
 
     private final JTable tableMetadata;
     private final DefaultTableModel tableModel;
 
+    /** 当前所有鉴权对象行名（有序） */
+    private final List<String> authRows;
+
     private MetadataTablePanel(Builder builder) {
         this.tableModel = builder.tableModel;
         this.tableMetadata = builder.tableMetadata;
+        this.authRows = builder.authRows;
         initLayout();
+        rebuildRows();
     }
 
     /** 初始化布局 */
@@ -34,6 +40,59 @@ public class MetadataTablePanel extends JPanel {
         setLayout(new BorderLayout());
         JScrollPane scrollPane = new JScrollPane(tableMetadata);
         add(scrollPane, BorderLayout.CENTER);
+    }
+
+    /**
+     * 添加一个鉴权对象行
+     *
+     * @param name 鉴权对象名称（如 "User1"）
+     */
+    public void addAuthRow(String name) {
+        if (authRows.contains(name)) {
+            return;
+        }
+        authRows.add(name);
+        rebuildRows();
+    }
+
+    /**
+     * 删除一个鉴权对象行
+     *
+     * @param name 鉴权对象名称
+     */
+    public void removeAuthRow(String name) {
+        if (!authRows.remove(name)) {
+            return;
+        }
+        rebuildRows();
+    }
+
+    /** 重建透视表行（每个鉴权对象一行，数据清空） */
+    private void rebuildRows() {
+        tableModel.setRowCount(0);
+        for (String name : authRows) {
+            tableModel.addRow(new Object[]{name, "", "", "", ""});
+        }
+    }
+
+    /**
+     * 更新指定鉴权对象行的元数据
+     *
+     * @param name       鉴权对象名称
+     * @param statusCode 状态码
+     * @param length     包长度
+     * @param hash       哈希值
+     * @param paramCount 参数个数
+     */
+    public void updateRow(String name, int statusCode, int length, String hash, int paramCount) {
+        int rowIndex = authRows.indexOf(name);
+        if (rowIndex < 0) {
+            return;
+        }
+        tableModel.setValueAt(statusCode, rowIndex, 1);
+        tableModel.setValueAt(length, rowIndex, 2);
+        tableModel.setValueAt(hash, rowIndex, 3);
+        tableModel.setValueAt(paramCount, rowIndex, 4);
     }
 
     /** 获取元数据表格 */
@@ -46,34 +105,14 @@ public class MetadataTablePanel extends JPanel {
         return tableModel;
     }
 
-    /**
-     * 更新透视表数据
-     *
-     * @param originalStatusCode   原始对象状态码
-     * @param originalLength       原始对象包长度
-     * @param originalHash         原始对象哈希
-     * @param originalParamCount   原始对象参数个数
-     * @param lowPrivStatusCode    低权限对象状态码
-     * @param lowPrivLength        低权限对象包长度
-     * @param lowPrivHash          低权限对象哈希
-     * @param lowPrivParamCount    低权限对象参数个数
-     * @param unauthStatusCode     未授权对象状态码
-     * @param unauthLength         未授权对象包长度
-     * @param unauthHash           未授权对象哈希
-     * @param unauthParamCount     未授权对象参数个数
-     */
-    public void updateMetadata(int originalStatusCode, int originalLength, String originalHash, int originalParamCount,
-                               int lowPrivStatusCode, int lowPrivLength, String lowPrivHash, int lowPrivParamCount,
-                               int unauthStatusCode, int unauthLength, String unauthHash, int unauthParamCount) {
-        tableModel.setRowCount(0);
-        tableModel.addRow(new Object[]{ROW_LABELS[0], originalStatusCode, originalLength, originalHash, originalParamCount});
-        tableModel.addRow(new Object[]{ROW_LABELS[1], lowPrivStatusCode, lowPrivLength, lowPrivHash, lowPrivParamCount});
-        tableModel.addRow(new Object[]{ROW_LABELS[2], unauthStatusCode, unauthLength, unauthHash, unauthParamCount});
+    /** 获取当前鉴权对象行名列表 */
+    public List<String> getAuthRows() {
+        return List.copyOf(authRows);
     }
 
-    /** 清空透视表数据 */
+    /** 清空透视表数据（保留行结构） */
     public void clearAll() {
-        tableModel.setRowCount(0);
+        rebuildRows();
     }
 
     /**
@@ -83,8 +122,13 @@ public class MetadataTablePanel extends JPanel {
 
         private DefaultTableModel tableModel;
         private JTable tableMetadata;
+        private List<String> authRows;
 
         public Builder() {
+            this.authRows = new ArrayList<>();
+            for (String row : DEFAULT_AUTH_ROWS) {
+                authRows.add(row);
+            }
             this.tableModel = new DefaultTableModel(COLUMN_NAMES, 0) {
                 @Override
                 public boolean isCellEditable(int row, int column) {

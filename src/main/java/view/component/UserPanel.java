@@ -1,0 +1,183 @@
+package view.component;
+
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Consumer;
+
+/**
+ * 用户面板
+ * 位于右侧 TabbedPane 的 User 选项卡中。
+ * 使用 JTabbedPane 管理多个鉴权对象，每个选项卡对应一个 AuthUserConfigPanel。
+ * 每个选项卡头部带有 × 关闭按钮，末尾有一个 "+" 选项卡用于添加新用户。
+ */
+public class UserPanel extends JPanel {
+
+    /** "+" 占位面板，点击该 Tab 时触发添加逻辑 */
+    private static final JPanel PLACEHOLDER_ADD = new JPanel();
+    private static final String ADD_TAB_TITLE = "+";
+
+    private final JTabbedPane tabbedUsers;
+
+    /** 选项卡名称 -> AuthUserConfigPanel 的映射 */
+    private final Map<String, AuthUserConfigPanel> userPanels;
+
+    /** 用户计数器，用于生成默认名称 */
+    private int userCounter;
+
+    /** 用户添加回调列表 */
+    private final List<Consumer<String>> onUserAddedListeners = new ArrayList<>();
+
+    /** 用户删除回调列表 */
+    private final List<Consumer<String>> onUserRemovedListeners = new ArrayList<>();
+
+    private UserPanel(Builder builder) {
+        this.tabbedUsers = builder.tabbedUsers;
+        this.userPanels = builder.userPanels;
+        this.userCounter = builder.userCounter;
+        initLayout();
+        appendAddTab();
+        bindEvents();
+    }
+
+    /** 初始化布局 */
+    private void initLayout() {
+        setLayout(new BorderLayout());
+        add(tabbedUsers, BorderLayout.CENTER);
+    }
+
+    /** 在末尾追加 "+" 占位选项卡，并禁用该 Tab 的内容区 */
+    private void appendAddTab() {
+        tabbedUsers.addTab(ADD_TAB_TITLE, PLACEHOLDER_ADD);
+    }
+
+    /** 绑定事件：通过 MouseListener 监听点击 "+" Tab */
+    private void bindEvents() {
+        tabbedUsers.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                int clickedIndex = tabbedUsers.indexAtLocation(e.getX(), e.getY());
+                if (clickedIndex < 0) {
+                    return;
+                }
+                if (tabbedUsers.getComponentAt(clickedIndex) == PLACEHOLDER_ADD) {
+                    SwingUtilities.invokeLater(() -> addUser());
+                }
+            }
+        });
+    }
+
+    /**
+     * 添加一个新的鉴权对象选项卡
+     *
+     * @return 新创建的 AuthUserConfigPanel
+     */
+    public AuthUserConfigPanel addUser() {
+        userCounter++;
+        String name = "User" + userCounter;
+        AuthUserConfigPanel configPanel = new AuthUserConfigPanel.Builder(name).build();
+        userPanels.put(name, configPanel);
+
+        // 插入到 "+" Tab 之前
+        int addTabIndex = tabbedUsers.indexOfComponent(PLACEHOLDER_ADD);
+        tabbedUsers.insertTab(name, null, configPanel, null, addTabIndex);
+
+        // 设置可关闭的选项卡头部
+        CloseableTabHeader header = new CloseableTabHeader(name, () -> removeUser(name));
+        tabbedUsers.setTabComponentAt(addTabIndex, header);
+
+        tabbedUsers.setSelectedComponent(configPanel);
+        onUserAddedListeners.forEach(listener -> listener.accept(name));
+        return configPanel;
+    }
+
+    /**
+     * 根据名称移除指定的鉴权对象选项卡
+     *
+     * @param name 鉴权对象名称
+     */
+    public void removeUser(String name) {
+        AuthUserConfigPanel panel = userPanels.remove(name);
+        if (panel == null) {
+            return;
+        }
+        int index = tabbedUsers.indexOfComponent(panel);
+        if (index >= 0) {
+            tabbedUsers.removeTabAt(index);
+        }
+        onUserRemovedListeners.forEach(listener -> listener.accept(name));
+    }
+
+    /**
+     * 注册用户添加回调
+     *
+     * @param listener 回调函数，参数为用户名称
+     */
+    public void onUserAdded(Consumer<String> listener) {
+        onUserAddedListeners.add(listener);
+    }
+
+    /**
+     * 注册用户删除回调
+     *
+     * @param listener 回调函数，参数为用户名称
+     */
+    public void onUserRemoved(Consumer<String> listener) {
+        onUserRemovedListeners.add(listener);
+    }
+
+    /** 获取鉴权对象 TabbedPane */
+    public JTabbedPane getTabbedUsers() {
+        return tabbedUsers;
+    }
+
+    /**
+     * 获取所有鉴权对象配置面板
+     *
+     * @return 名称 -> AuthUserConfigPanel 的映射（只读视图）
+     */
+    public Map<String, AuthUserConfigPanel> getUserPanels() {
+        return Map.copyOf(userPanels);
+    }
+
+    /**
+     * 根据名称获取指定的鉴权对象配置面板
+     *
+     * @param name 鉴权对象名称
+     * @return 对应的 AuthUserConfigPanel，不存在返回 null
+     */
+    public AuthUserConfigPanel getUserPanel(String name) {
+        return userPanels.get(name);
+    }
+
+    /** 获取当前鉴权对象数量 */
+    public int getUserCount() {
+        return userPanels.size();
+    }
+
+    /**
+     * 用户面板建造器
+     */
+    public static class Builder {
+
+        private final JTabbedPane tabbedUsers;
+        private final Map<String, AuthUserConfigPanel> userPanels;
+        private int userCounter;
+
+        public Builder() {
+            this.tabbedUsers = new JTabbedPane();
+            this.userPanels = new LinkedHashMap<>();
+            this.userCounter = 0;
+        }
+
+        /** 构建用户面板 */
+        public UserPanel build() {
+            return new UserPanel(this);
+        }
+    }
+}
