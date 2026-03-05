@@ -1,5 +1,6 @@
 package core;
 
+import burp.api.montoya.core.ToolType;
 import burp.api.montoya.http.handler.*;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;
@@ -84,8 +85,13 @@ public class HttpRequestHandler implements HttpHandler {
 
     /**
      * 处理响应：过滤检查 + 触发回调
+     * 过滤掉插件自身发出的请求（EXTENSIONS），避免循环发包。
      */
     private void processResponse(HttpResponseReceived responseReceived) {
+        // 过滤掉插件自身重放的请求，防止无限循环
+        if (responseReceived.toolSource().isFromTool(ToolType.EXTENSIONS)) {
+            return;
+        }
         HttpRequest request = responseReceived.initiatingRequest();
         if (shouldProcess(request, responseReceived.statusCode())) {
             onRequestCaptured.accept(request, responseReceived);

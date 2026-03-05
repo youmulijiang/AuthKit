@@ -1,6 +1,7 @@
 import burp.api.montoya.BurpExtension;
 import burp.api.montoya.MontoyaApi;
 import controller.AuthController;
+import core.DiffService;
 import core.HttpRequestHandler;
 import core.RequestReplayService;
 import core.TextDiffService;
@@ -37,8 +38,8 @@ public class AuthKit implements BurpExtension {
         // 创建线程池
         executor = Executors.newFixedThreadPool(3);
 
-        // 创建 UI
-        MainPanel mainPanel = new MainPanel();
+        // 创建 UI（传入 MontoyaApi 以创建 Burp 原生编辑器）
+        MainPanel mainPanel = new MainPanel(montoyaApi);
         montoyaApi.userInterface().registerSuiteTab("AuthKit", mainPanel);
 
         // 创建配置模型
@@ -70,19 +71,45 @@ public class AuthKit implements BurpExtension {
             mainPanel.getPanelCompare().clearAll();
         });
 
+        // 绑定展示指标下拉框切换 → 刷新 DataTable 中鉴权对象列的数据
+        mainPanel.getPanelConfiguration().getComboBoxDisplayMetric().addActionListener(e -> {
+            String metric = mainPanel.getPanelConfiguration().getSelectedDisplayMetric();
+            DataTablePanel dataTable = mainPanel.getPanelDataTable();
+            List<String> authColumns = dataTable.getAuthColumns();
+            int rowCount = dataTable.getTableModel().getRowCount();
+            for (int row = 0; row < rowCount; row++) {
+                CompareSampleModel sample = controller.getSample(row);
+                if (sample != null) {
+                    for (int col = 0; col < authColumns.size(); col++) {
+                        dataTable.getTableModel().setValueAt(
+                                sample.getValueByAuthName(authColumns.get(col), metric),
+                                row, 3 + col);
+                    }
+                }
+            }
+        });
+
         // 绑定 DataTable 行选中事件 → 更新 MetadataTable + ComparePanel
         bindTableSelection(mainPanel, controller);
 
+        // 绑定 Diff 按钮事件
+        bindDiffButton(mainPanel.getPanelCompare(), diffService);
+
         // 创建并注册 HttpRequestHandler
         HttpRequestHandler httpHandler = new HttpRequestHandler(configModel, (request, response) -> {
+            // 去重检查：相同 method + url 的请求只处理一次
+            if (!controller.isNewRequest(request.method(), request.url())) {
+                return;
+            }
             executor.submit(() -> {
                 try {
-                    // 构建原始报文数据
+                    // 构建原始报文数据（含 Montoya 原始对象引用）
                     MessageDataModel originalData = new MessageDataModel(
                             request.toString(), response.toString(),
                             response.statusCode(),
                             response.toByteArray().length(),
-                            core.HashService.md5(response.toByteArray().getBytes())
+                            core.HashService.hash(response.bodyToString()),
+                            request, response
                     );
 
                     // 从 UserPanel 收集启用的用户配置
@@ -213,15 +240,16 @@ public class AuthKit implements BurpExtension {
     private void updateUI(MainPanel mainPanel, CompareSampleModel sample) {
         DataTablePanel dataTable = mainPanel.getPanelDataTable();
         List<String> authColumns = dataTable.getAuthColumns();
+        String metric = mainPanel.getPanelConfiguration().getSelectedDisplayMetric();
 
-        // 构建行数据: # / Method / URL / 各鉴权对象的包长度
+        // 构建行数据: # / Method / URL / 各鉴权对象的指标值
         int totalColumns = 3 + authColumns.size();
         Object[] row = new Object[totalColumns];
         row[0] = sample.getId();
         row[1] = sample.getMethod();
         row[2] = sample.getUrl();
         for (int i = 0; i < authColumns.size(); i++) {
-            row[3 + i] = sample.getLengthByAuthName(authColumns.get(i));
+            row[3 + i] = sample.getValueByAuthName(authColumns.get(i), metric);
         }
         dataTable.addRow(row);
     }
@@ -240,7 +268,7 @@ public class AuthKit implements BurpExtension {
     }
 
     /**
-     * 更新 ComparePanel
+     * 更新 ComparePanel（使用 Montoya 原始对象设置编辑器内容）
      */
     private void updateComparePanel(ComparePanel comparePanel, CompareSampleModel sample) {
         Map<String, MessagePanel> sourcePanels = comparePanel.getSourcePanels();
@@ -249,7 +277,7 @@ public class AuthKit implements BurpExtension {
         for (Map.Entry<String, MessagePanel> entry : sourcePanels.entrySet()) {
             MessageDataModel data = sample.getMessageData(entry.getKey());
             if (data != null) {
-                entry.getValue().setContent(data.getRequest(), data.getResponse());
+                entry.getValue().setContent(data.getHttpRequest(), data.getHttpResponse());
             } else {
                 entry.getValue().clearContent();
             }
@@ -257,10 +285,63 @@ public class AuthKit implements BurpExtension {
         for (Map.Entry<String, MessagePanel> entry : targetPanels.entrySet()) {
             MessageDataModel data = sample.getMessageData(entry.getKey());
             if (data != null) {
-                entry.getValue().setContent(data.getRequest(), data.getResponse());
+                entry.getValue().setContent(data.getHttpRequest(), data.getHttpResponse());
             } else {
                 entry.getValue().clearContent();
             }
         }
+    }
+
+    /**
+     * 绑定 Diff 按钮事件
+     * 根据 Source/Target 当前选中的 Tab 类型（Request/Response）自动对比对应内容
+     */
+    private void bindDiffButton(ComparePanel comparePanel, DiffService diffService) {
+        comparePanel.getBtnDiff().addActionListener(e -> {
+            MessagePanel sourcePanel = comparePanel.getSelectedSourcePanel();
+            MessagePanel targetPanel = comparePanel.getSelectedTargetPanel();
+            if (sourcePanel == null || targetPanel == null) {
+                comparePanel.setDiffContent("<html><body><p>请先选择 Source 和 Target 对象</p></body></html>");
+                return;
+            }
+
+            String sourceName = comparePanel.getSelectedSourceName();
+            String targetName = comparePanel.getSelectedTargetName();
+            int tabIndex = sourcePanel.getSelectedTabIndex();
+            String tabType = tabIndex == 0 ? "Request" : "Response";
+
+            String sourceText;
+            String targetText;
+
+            if (tabIndex == 0) {
+                // Request Tab
+                sourceText = sourcePanel.getRequestEditor().getRequest() != null
+                        ? sourcePanel.getRequestEditor().getRequest().toString() : "";
+                targetText = targetPanel.getRequestEditor().getRequest() != null
+                        ? targetPanel.getRequestEditor().getRequest().toString() : "";
+            } else {
+                // Response Tab
+                sourceText = sourcePanel.getResponseEditor().getResponse() != null
+                        ? sourcePanel.getResponseEditor().getResponse().toString() : "";
+                targetText = targetPanel.getResponseEditor().getResponse() != null
+                        ? targetPanel.getResponseEditor().getResponse().toString() : "";
+            }
+
+            String diffBody = diffService.diff(sourceText, targetText);
+
+            // 构建完整 HTML（含标题）
+            StringBuilder html = new StringBuilder();
+            html.append("<html><body style='font-family:Courier New;font-size:10pt;'>");
+            html.append("<b>Diff: ").append(sourceName).append(" (").append(tabType)
+                    .append(") &rarr; ").append(targetName).append(" (").append(tabType).append(")</b><br>");
+            if (diffBody.isEmpty()) {
+                html.append("<br><span style='color:green;'>无差异</span>");
+            } else {
+                html.append(diffBody);
+            }
+            html.append("</body></html>");
+
+            comparePanel.setDiffContent(html.toString());
+        });
     }
 }

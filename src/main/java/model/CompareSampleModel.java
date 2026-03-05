@@ -107,5 +107,24 @@ public class CompareSampleModel {
         MessageDataModel data = messageDataMap.get(authName);
         return data != null ? data.getLength() : 0;
     }
+
+    /**
+     * 根据指定指标获取鉴权对象的数据值
+     *
+     * @param authName 鉴权对象名称
+     * @param metric   指标名称（Length / Status Code / Hash）
+     * @return 对应指标的值，无数据返回 0
+     */
+    public int getValueByAuthName(String authName, String metric) {
+        MessageDataModel data = messageDataMap.get(authName);
+        if (data == null) {
+            return 0;
+        }
+        return switch (metric) {
+            case "Status Code" -> data.getStatusCode();
+            case "Hash" -> data.getHash();
+            default -> data.getLength();
+        };
+    }
 }
 

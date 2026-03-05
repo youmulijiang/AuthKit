@@ -19,43 +19,46 @@ class TextDiffServiceTest {
     }
 
     @Test
-    @DisplayName("相同文本应返回无差异结果")
-    void sameText_shouldReturnNoDiff() {
+    @DisplayName("相同文本应返回空字符串（无差异）")
+    void sameText_shouldReturnEmpty() {
         String text = "line1\nline2\nline3";
         String result = diffService.diff(text, text);
-        // 相同文本不应有差异标记
-        assertFalse(result.contains("+"));
-        assertFalse(result.contains("-"));
+        assertEquals("", result);
     }
 
     @Test
-    @DisplayName("不同文本应返回差异结果")
-    void differentText_shouldReturnDiff() {
+    @DisplayName("不同文本应返回 HTML 格式差异")
+    void differentText_shouldReturnHtmlDiff() {
         String original = "line1\nline2\nline3";
         String modified = "line1\nmodified\nline3";
         String result = diffService.diff(original, modified);
         assertNotNull(result);
         assertFalse(result.isEmpty());
-        // 应包含差异信息
+        // 应包含 HTML 高亮标签
+        assertTrue(result.contains("Inserts:"));
+        assertTrue(result.contains("Deletes:"));
+        // 应包含差异内容
         assertTrue(result.contains("line2") || result.contains("modified"));
     }
 
     @Test
-    @DisplayName("新增行应在 diff 中标记")
-    void addedLines_shouldBeMarked() {
+    @DisplayName("新增行应用绿色背景标记")
+    void addedLines_shouldBeHighlightedGreen() {
         String original = "line1\nline2";
         String modified = "line1\nline2\nline3";
         String result = diffService.diff(original, modified);
         assertTrue(result.contains("line3"));
+        assertTrue(result.contains("#c2f9c2")); // 绿色背景
     }
 
     @Test
-    @DisplayName("删除行应在 diff 中标记")
-    void deletedLines_shouldBeMarked() {
+    @DisplayName("删除行应用红色背景标记")
+    void deletedLines_shouldBeHighlightedRed() {
         String original = "line1\nline2\nline3";
         String modified = "line1\nline3";
         String result = diffService.diff(original, modified);
         assertTrue(result.contains("line2"));
+        assertTrue(result.contains("#ffb2b2")); // 红色背景
     }
 
     @Test
@@ -74,13 +77,15 @@ class TextDiffServiceTest {
     }
 
     @Test
-    @DisplayName("完全不同的文本应返回完整差异")
-    void completelyDifferent_shouldReturnFullDiff() {
+    @DisplayName("完全不同的文本应返回包含 Inserts 和 Deletes 统计的 HTML")
+    void completelyDifferent_shouldReturnFullHtmlDiff() {
         String original = "aaa\nbbb";
         String modified = "xxx\nyyy";
         String result = diffService.diff(original, modified);
         assertNotNull(result);
         assertFalse(result.isEmpty());
+        assertTrue(result.contains("Inserts:"));
+        assertTrue(result.contains("Deletes:"));
     }
 }
 

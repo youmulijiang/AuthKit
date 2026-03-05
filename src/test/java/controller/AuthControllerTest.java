@@ -61,8 +61,8 @@ class AuthControllerTest {
         HttpRequestResponse unauthReqResp = mock(HttpRequestResponse.class);
         when(replayService.replayUnauthorized(eq(request), anyList())).thenReturn(unauthReqResp);
 
-        MessageDataModel originalData = new MessageDataModel("req", "resp", 200, 100, "abc123");
-        MessageDataModel unauthData = new MessageDataModel("req2", "resp2", 403, 50, "def456");
+        MessageDataModel originalData = new MessageDataModel("req", "resp", 200, 100, 12345);
+        MessageDataModel unauthData = new MessageDataModel("req2", "resp2", 403, 50, 67890);
         when(replayService.buildMessageData(unauthReqResp)).thenReturn(unauthData);
 
         // 执行
@@ -85,7 +85,7 @@ class AuthControllerTest {
 
         HttpRequestResponse unauthReqResp = mock(HttpRequestResponse.class);
         when(replayService.replayUnauthorized(eq(request), anyList())).thenReturn(unauthReqResp);
-        MessageDataModel unauthData = new MessageDataModel("r", "r", 200, 10, "h1");
+        MessageDataModel unauthData = new MessageDataModel("r", "r", 200, 10, 1001);
         when(replayService.buildMessageData(unauthReqResp)).thenReturn(unauthData);
 
         // 两个用户
@@ -96,10 +96,10 @@ class AuthControllerTest {
 
         HttpRequestResponse user1ReqResp = mock(HttpRequestResponse.class);
         when(replayService.replay(request, user1)).thenReturn(user1ReqResp);
-        MessageDataModel user1Data = new MessageDataModel("r1", "r1", 200, 20, "h2");
+        MessageDataModel user1Data = new MessageDataModel("r1", "r1", 200, 20, 1002);
         when(replayService.buildMessageData(user1ReqResp)).thenReturn(user1Data);
 
-        MessageDataModel originalData = new MessageDataModel("req", "resp", 200, 100, "abc");
+        MessageDataModel originalData = new MessageDataModel("req", "resp", 200, 100, 11111);
 
         CompareSampleModel sample = controller.processRequest(
                 request, response, originalData, List.of(user1, user2));
@@ -140,13 +140,32 @@ class AuthControllerTest {
         HttpRequestResponse unauthReqResp = mock(HttpRequestResponse.class);
         when(replayService.replayUnauthorized(eq(request), anyList())).thenReturn(unauthReqResp);
         when(replayService.buildMessageData(unauthReqResp))
-                .thenReturn(new MessageDataModel("r", "r", 200, 10, "h"));
+                .thenReturn(new MessageDataModel("r", "r", 200, 10, 2001));
 
-        MessageDataModel originalData = new MessageDataModel("req", "resp", 200, 100, "abc");
+        MessageDataModel originalData = new MessageDataModel("req", "resp", 200, 100, 2002);
         controller.processRequest(request, response, originalData, List.of());
 
         assertEquals(1, controller.getSamples().size());
     }
+
+    @Test
+    @DisplayName("isNewRequest 应对相同 method+url 去重")
+    void isNewRequest_shouldDeduplicateSameMethodUrl() {
+        assertTrue(controller.isNewRequest("GET", "http://example.com/api"));
+        assertFalse(controller.isNewRequest("GET", "http://example.com/api"));
+        assertTrue(controller.isNewRequest("POST", "http://example.com/api"));
+        assertTrue(controller.isNewRequest("GET", "http://example.com/other"));
+    }
+
+    @Test
+    @DisplayName("clearAll 应同时清空去重集合")
+    void clearAll_shouldClearDeduplicationSet() {
+        controller.isNewRequest("GET", "http://example.com/api");
+        assertFalse(controller.isNewRequest("GET", "http://example.com/api"));
+        controller.clearAll();
+        assertTrue(controller.isNewRequest("GET", "http://example.com/api"));
+    }
+
 
     @Test
     @DisplayName("clearAll 应清空所有记录")
@@ -159,9 +178,9 @@ class AuthControllerTest {
         HttpRequestResponse unauthReqResp = mock(HttpRequestResponse.class);
         when(replayService.replayUnauthorized(eq(request), anyList())).thenReturn(unauthReqResp);
         when(replayService.buildMessageData(unauthReqResp))
-                .thenReturn(new MessageDataModel("r", "r", 200, 10, "h"));
+                .thenReturn(new MessageDataModel("r", "r", 200, 10, 3001));
 
-        MessageDataModel originalData = new MessageDataModel("req", "resp", 200, 100, "abc");
+        MessageDataModel originalData = new MessageDataModel("req", "resp", 200, 100, 3002);
         controller.processRequest(request, response, originalData, List.of());
 
         assertFalse(controller.getSamples().isEmpty());

@@ -1,5 +1,6 @@
 package view;
 
+import burp.api.montoya.MontoyaApi;
 import view.component.ComparePanel;
 import view.component.ConfigurationPanel;
 import view.component.DataTablePanel;
@@ -26,13 +27,18 @@ public class MainPanel extends JPanel {
     private final ConfigurationPanel panelConfiguration;
     private final UserPanel panelUser;
 
-    public MainPanel() {
+    /**
+     * 构造主面板
+     *
+     * @param api Montoya API 实例，用于创建 Burp 原生编辑器
+     */
+    public MainPanel(MontoyaApi api) {
         this.panelToolbar = new ToolbarPanel.Builder()
                 .filterPlaceholder("输入 URL 关键字筛选")
                 .build();
         this.panelDataTable = new DataTablePanel.Builder().build();
         this.panelMetadataTable = new MetadataTablePanel.Builder().build();
-        this.panelCompare = new ComparePanel.Builder().build();
+        this.panelCompare = new ComparePanel.Builder(api).build();
         this.panelConfiguration = new ConfigurationPanel.Builder().build();
         this.panelUser = new UserPanel.Builder().build();
         this.tabbedRight = new JTabbedPane();

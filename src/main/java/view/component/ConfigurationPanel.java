@@ -14,9 +14,13 @@ import java.awt.*;
  */
 public class ConfigurationPanel extends JPanel {
 
+    /** DataTable 鉴权列可展示的指标选项 */
+    public static final String[] DISPLAY_METRICS = {"Length", "Status Code", "Hash"};
+
     // ===== 基础控制区 =====
     private final JCheckBox checkBoxEnabled;
     private final JButton btnClearTable;
+    private final JComboBox<String> comboBoxDisplayMetric;
 
     // ===== 域名作用域 =====
     private final JCheckBox checkBoxDomainFilter;
@@ -36,6 +40,7 @@ public class ConfigurationPanel extends JPanel {
     private ConfigurationPanel(Builder builder) {
         this.checkBoxEnabled = builder.checkBoxEnabled;
         this.btnClearTable = builder.btnClearTable;
+        this.comboBoxDisplayMetric = builder.comboBoxDisplayMetric;
         this.checkBoxDomainFilter = builder.checkBoxDomainFilter;
         this.textAreaDomain = builder.textAreaDomain;
         this.checkBoxMethodFilter = builder.checkBoxMethodFilter;
@@ -73,6 +78,8 @@ public class ConfigurationPanel extends JPanel {
         panel.setBorder(new TitledBorder("Basic Control"));
         panel.add(checkBoxEnabled);
         panel.add(btnClearTable);
+        panel.add(new JLabel("Display:"));
+        panel.add(comboBoxDisplayMetric);
         panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 60));
         return panel;
     }
@@ -144,6 +151,16 @@ public class ConfigurationPanel extends JPanel {
         return btnClearTable;
     }
 
+    /** 获取数据展示指标下拉框 */
+    public JComboBox<String> getComboBoxDisplayMetric() {
+        return comboBoxDisplayMetric;
+    }
+
+    /** 获取当前选中的展示指标 */
+    public String getSelectedDisplayMetric() {
+        return (String) comboBoxDisplayMetric.getSelectedItem();
+    }
+
     /** 获取域名过滤开关 */
     public JCheckBox getCheckBoxDomainFilter() {
         return checkBoxDomainFilter;
@@ -196,6 +213,7 @@ public class ConfigurationPanel extends JPanel {
 
         private final JCheckBox checkBoxEnabled;
         private final JButton btnClearTable;
+        private final JComboBox<String> comboBoxDisplayMetric;
         private final JCheckBox checkBoxDomainFilter;
         private final JTextArea textAreaDomain;
         private final JCheckBox checkBoxMethodFilter;
@@ -211,6 +229,8 @@ public class ConfigurationPanel extends JPanel {
 
             this.checkBoxEnabled = new JCheckBox("Enable Plugin", true);
             this.btnClearTable = new JButton("Clear Table");
+            this.comboBoxDisplayMetric = new JComboBox<>(DISPLAY_METRICS);
+            this.comboBoxDisplayMetric.setSelectedItem("Length"); // 默认展示包长度
 
             this.checkBoxDomainFilter = new JCheckBox("Enable Domain Filter", false);
             this.textAreaDomain = new JTextArea();

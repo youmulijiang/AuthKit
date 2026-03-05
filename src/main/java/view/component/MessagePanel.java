@@ -1,26 +1,38 @@
 package view.component;
 
+import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.http.message.requests.HttpRequest;
+import burp.api.montoya.http.message.responses.HttpResponse;
+import burp.api.montoya.ui.editor.EditorOptions;
+import burp.api.montoya.ui.editor.HttpRequestEditor;
+import burp.api.montoya.ui.editor.HttpResponseEditor;
+
 import javax.swing.*;
 import java.awt.*;
 
 /**
  * 报文面板组件（可复用）
  * 内含一个 JTabbedPane，包含 Request 和 Response 两个选项卡，
- * 每个选项卡内是一个只读等宽字体的 JTextArea。
+ * 使用 Montoya API 的 HttpRequestEditor 和 HttpResponseEditor 展示报文。
  * 每个鉴权对象（Original / Unauthorized / User1 ...）对应一个 MessagePanel 实例。
  */
 public class MessagePanel extends JPanel {
 
-    private static final Font MONO_FONT = new Font("Monospaced", Font.PLAIN, 12);
-
     private final JTabbedPane tabbedMessage;
-    private final JTextArea textAreaRequest;
-    private final JTextArea textAreaResponse;
+    private final HttpRequestEditor requestEditor;
+    private final HttpResponseEditor responseEditor;
 
-    private MessagePanel(Builder builder) {
-        this.tabbedMessage = builder.tabbedMessage;
-        this.textAreaRequest = builder.textAreaRequest;
-        this.textAreaResponse = builder.textAreaResponse;
+    /**
+     * 构造报文面板
+     *
+     * @param api Montoya API 实例
+     */
+    public MessagePanel(MontoyaApi api) {
+        this.requestEditor = api.userInterface().createHttpRequestEditor(EditorOptions.READ_ONLY);
+        this.responseEditor = api.userInterface().createHttpResponseEditor(EditorOptions.READ_ONLY);
+        this.tabbedMessage = new JTabbedPane();
+        this.tabbedMessage.addTab("Request", requestEditor.uiComponent());
+        this.tabbedMessage.addTab("Response", responseEditor.uiComponent());
         initLayout();
     }
 
@@ -35,64 +47,42 @@ public class MessagePanel extends JPanel {
         return tabbedMessage;
     }
 
-    /** 获取请求报文文本区 */
-    public JTextArea getTextAreaRequest() {
-        return textAreaRequest;
+    /** 获取 Montoya 请求编辑器 */
+    public HttpRequestEditor getRequestEditor() {
+        return requestEditor;
     }
 
-    /** 获取响应报文文本区 */
-    public JTextArea getTextAreaResponse() {
-        return textAreaResponse;
+    /** 获取 Montoya 响应编辑器 */
+    public HttpResponseEditor getResponseEditor() {
+        return responseEditor;
     }
 
     /**
-     * 设置报文内容
+     * 设置报文内容（使用 Montoya 原始对象）
      *
-     * @param request  请求报文
-     * @param response 响应报文
+     * @param request  Montoya HttpRequest 对象
+     * @param response Montoya HttpResponse 对象
      */
-    public void setContent(String request, String response) {
-        textAreaRequest.setText(request);
-        textAreaResponse.setText(response);
-        textAreaRequest.setCaretPosition(0);
-        textAreaResponse.setCaretPosition(0);
+    public void setContent(HttpRequest request, HttpResponse response) {
+        if (request != null) {
+            requestEditor.setRequest(request);
+        }
+        if (response != null) {
+            responseEditor.setResponse(response);
+        }
     }
 
     /** 清空报文内容 */
     public void clearContent() {
-        textAreaRequest.setText("");
-        textAreaResponse.setText("");
+        requestEditor.setRequest(HttpRequest.httpRequest(""));
+        responseEditor.setResponse(HttpResponse.httpResponse(""));
     }
 
     /**
-     * 报文面板建造器
+     * 获取当前选中的 Tab 索引
+     * 0 = Request, 1 = Response
      */
-    public static class Builder {
-
-        private JTabbedPane tabbedMessage;
-        private JTextArea textAreaRequest;
-        private JTextArea textAreaResponse;
-
-        public Builder() {
-            this.textAreaRequest = createReadOnlyTextArea();
-            this.textAreaResponse = createReadOnlyTextArea();
-            this.tabbedMessage = new JTabbedPane();
-            this.tabbedMessage.addTab("Request", new JScrollPane(textAreaRequest));
-            this.tabbedMessage.addTab("Response", new JScrollPane(textAreaResponse));
-        }
-
-        /** 创建只读等宽字体文本区 */
-        private JTextArea createReadOnlyTextArea() {
-            JTextArea textArea = new JTextArea();
-            textArea.setFont(MONO_FONT);
-            textArea.setEditable(false);
-            return textArea;
-        }
-
-        /** 构建报文面板 */
-        public MessagePanel build() {
-            return new MessagePanel(this);
-        }
+    public int getSelectedTabIndex() {
+        return tabbedMessage.getSelectedIndex();
     }
 }
-

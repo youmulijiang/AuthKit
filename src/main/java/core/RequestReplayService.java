@@ -71,10 +71,10 @@ public class RequestReplayService {
         String requestStr = request.toString();
         String responseStr = response.toString();
         int statusCode = response.statusCode();
-        int length = response.toByteArray().length();
-        String hash = HashService.md5(response.toByteArray().getBytes());
+        int length = response.bodyToString().length();
+        int hash = HashService.hash(response.bodyToString());
 
-        return new MessageDataModel(requestStr, responseStr, statusCode, length, hash);
+        return new MessageDataModel(requestStr, responseStr, statusCode, length, hash, request, response);
     }
 }
 

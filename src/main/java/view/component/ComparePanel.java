@@ -1,5 +1,7 @@
 package view.component;
 
+import burp.api.montoya.MontoyaApi;
+
 import javax.swing.*;
 import java.awt.*;
 import java.util.LinkedHashMap;
@@ -11,7 +13,7 @@ import java.util.Map;
  * 1. 选择区 (Source) - 外层 JTabbedPane 选项卡为鉴权对象（Original / Unauthorized / User1 ...），
  *    每个选项卡内嵌一个 MessagePanel（含 Request / Response 两个 Tab）。
  * 2. 被选择区 (Target) - 结构与选择区相同，用于选择被比较的鉴权对象。
- * 3. Diff 展示区 - JTextArea 展示两个区域的比较结果。
+ * 3. Diff 展示区 - 含 Diff 按钮和 JEditorPane（HTML）展示比较结果，支持颜色高亮。
  */
 public class ComparePanel extends JPanel {
 
@@ -21,8 +23,10 @@ public class ComparePanel extends JPanel {
     private final JTabbedPane tabbedSource;
     /** 被选择区：外层 TabbedPane，选项卡 = 鉴权对象 */
     private final JTabbedPane tabbedTarget;
-    /** Diff 差异展示文本区 */
-    private final JTextArea textAreaDiff;
+    /** Diff 差异展示区（HTML 渲染） */
+    private final JEditorPane editorPaneDiff;
+    /** Diff 按钮 */
+    private final JButton btnDiff;
 
     /** 选择区中每个鉴权对象名称 -> MessagePanel 的映射 */
     private final Map<String, MessagePanel> sourcePanels;
@@ -32,10 +36,12 @@ public class ComparePanel extends JPanel {
     private ComparePanel(Builder builder) {
         this.tabbedSource = builder.tabbedSource;
         this.tabbedTarget = builder.tabbedTarget;
-        this.textAreaDiff = builder.textAreaDiff;
+        this.editorPaneDiff = builder.editorPaneDiff;
+        this.btnDiff = builder.btnDiff;
         this.sourcePanels = builder.sourcePanels;
         this.targetPanels = builder.targetPanels;
         initLayout();
+        initTabSync();
     }
 
     /** 初始化垂直三分布局 */
@@ -52,10 +58,14 @@ public class ComparePanel extends JPanel {
         panelTarget.add(new JLabel("  Target"), BorderLayout.NORTH);
         panelTarget.add(tabbedTarget, BorderLayout.CENTER);
 
-        // 区域3: Diff 展示区
+        // 区域3: Diff 展示区（含 Diff 按钮）
+        JPanel panelDiffHeader = new JPanel(new BorderLayout());
+        panelDiffHeader.add(new JLabel("  Diff"), BorderLayout.WEST);
+        panelDiffHeader.add(btnDiff, BorderLayout.EAST);
+
         JPanel panelDiff = new JPanel(new BorderLayout());
-        panelDiff.add(new JLabel("  Diff"), BorderLayout.NORTH);
-        panelDiff.add(new JScrollPane(textAreaDiff), BorderLayout.CENTER);
+        panelDiff.add(panelDiffHeader, BorderLayout.NORTH);
+        panelDiff.add(new JScrollPane(editorPaneDiff), BorderLayout.CENTER);
 
         JSplitPane splitBottom = new JSplitPane(JSplitPane.VERTICAL_SPLIT, panelTarget, panelDiff);
         splitBottom.setResizeWeight(0.5);
@@ -64,6 +74,62 @@ public class ComparePanel extends JPanel {
         splitMain.setResizeWeight(0.33);
 
         add(splitMain, BorderLayout.CENTER);
+    }
+
+    /**
+     * 初始化 Source/Target 内部 Tab 同步
+     * 当 Source 选中的 MessagePanel 切换 Request/Response Tab 时，
+     * Target 选中的 MessagePanel 也同步切换到相同的 Tab。
+     */
+    private void initTabSync() {
+        // 监听 Source 中每个 MessagePanel 的内部 Tab 切换
+        for (MessagePanel panel : sourcePanels.values()) {
+            panel.getTabbedMessage().addChangeListener(e -> syncTargetTab());
+        }
+        // 监听 Source 外层 Tab 切换（切换鉴权对象时也同步）
+        tabbedSource.addChangeListener(e -> syncTargetTab());
+    }
+
+    /**
+     * 同步 Target 当前选中的 MessagePanel 的内部 Tab 到与 Source 一致
+     */
+    private void syncTargetTab() {
+        MessagePanel sourcePanel = getSelectedSourcePanel();
+        MessagePanel targetPanel = getSelectedTargetPanel();
+        if (sourcePanel != null && targetPanel != null) {
+            int sourceTabIndex = sourcePanel.getSelectedTabIndex();
+            if (targetPanel.getSelectedTabIndex() != sourceTabIndex) {
+                targetPanel.getTabbedMessage().setSelectedIndex(sourceTabIndex);
+            }
+        }
+    }
+
+    /** 获取 Source 当前选中的 MessagePanel */
+    public MessagePanel getSelectedSourcePanel() {
+        int idx = tabbedSource.getSelectedIndex();
+        if (idx < 0) return null;
+        String name = tabbedSource.getTitleAt(idx);
+        return sourcePanels.get(name);
+    }
+
+    /** 获取 Target 当前选中的 MessagePanel */
+    public MessagePanel getSelectedTargetPanel() {
+        int idx = tabbedTarget.getSelectedIndex();
+        if (idx < 0) return null;
+        String name = tabbedTarget.getTitleAt(idx);
+        return targetPanels.get(name);
+    }
+
+    /** 获取 Source 当前选中的鉴权对象名称 */
+    public String getSelectedSourceName() {
+        int idx = tabbedSource.getSelectedIndex();
+        return idx >= 0 ? tabbedSource.getTitleAt(idx) : null;
+    }
+
+    /** 获取 Target 当前选中的鉴权对象名称 */
+    public String getSelectedTargetName() {
+        int idx = tabbedTarget.getSelectedIndex();
+        return idx >= 0 ? tabbedTarget.getTitleAt(idx) : null;
     }
 
     /** 获取选择区外层 TabbedPane */
@@ -76,64 +142,47 @@ public class ComparePanel extends JPanel {
         return tabbedTarget;
     }
 
-    /** 获取 Diff 展示文本区 */
-    public JTextArea getTextAreaDiff() {
-        return textAreaDiff;
+    /** 获取 Diff 展示区 */
+    public JEditorPane getEditorPaneDiff() {
+        return editorPaneDiff;
     }
 
-    /**
-     * 根据名称获取选择区中的 MessagePanel
-     *
-     * @param name 鉴权对象名称
-     * @return 对应的 MessagePanel，不存在返回 null
-     */
+    /** 获取 Diff 按钮 */
+    public JButton getBtnDiff() {
+        return btnDiff;
+    }
+
+    /** 根据名称获取选择区中的 MessagePanel */
     public MessagePanel getSourcePanel(String name) {
         return sourcePanels.get(name);
     }
 
-    /**
-     * 根据名称获取被选择区中的 MessagePanel
-     *
-     * @param name 鉴权对象名称
-     * @return 对应的 MessagePanel，不存在返回 null
-     */
+    /** 根据名称获取被选择区中的 MessagePanel */
     public MessagePanel getTargetPanel(String name) {
         return targetPanels.get(name);
     }
 
-    /**
-     * 获取选择区所有 MessagePanel 映射
-     *
-     * @return 名称 -> MessagePanel 的映射（只读视图）
-     */
+    /** 获取选择区所有 MessagePanel 映射 */
     public Map<String, MessagePanel> getSourcePanels() {
         return Map.copyOf(sourcePanels);
     }
 
-    /**
-     * 获取被选择区所有 MessagePanel 映射
-     *
-     * @return 名称 -> MessagePanel 的映射（只读视图）
-     */
+    /** 获取被选择区所有 MessagePanel 映射 */
     public Map<String, MessagePanel> getTargetPanels() {
         return Map.copyOf(targetPanels);
     }
 
-    /**
-     * 设置 Diff 展示内容
-     *
-     * @param diffText diff 结果文本
-     */
-    public void setDiffContent(String diffText) {
-        textAreaDiff.setText(diffText);
-        textAreaDiff.setCaretPosition(0);
+    /** 设置 Diff 展示内容（HTML 格式） */
+    public void setDiffContent(String diffHtml) {
+        editorPaneDiff.setText(diffHtml);
+        editorPaneDiff.setCaretPosition(0);
     }
 
     /** 清空所有区域内容 */
     public void clearAll() {
         sourcePanels.values().forEach(MessagePanel::clearContent);
         targetPanels.values().forEach(MessagePanel::clearContent);
-        textAreaDiff.setText("");
+        editorPaneDiff.setText("");
     }
 
     /**
@@ -142,18 +191,21 @@ public class ComparePanel extends JPanel {
      */
     public static class Builder {
 
+        private final MontoyaApi api;
         private final JTabbedPane tabbedSource;
         private final JTabbedPane tabbedTarget;
-        private final JTextArea textAreaDiff;
+        private final JEditorPane editorPaneDiff;
+        private final JButton btnDiff;
         private final Map<String, MessagePanel> sourcePanels;
         private final Map<String, MessagePanel> targetPanels;
 
-        public Builder() {
+        public Builder(MontoyaApi api) {
+            this.api = api;
             this.tabbedSource = new JTabbedPane();
             this.tabbedTarget = new JTabbedPane();
-            this.textAreaDiff = new JTextArea();
-            this.textAreaDiff.setFont(MONO_FONT);
-            this.textAreaDiff.setEditable(false);
+            this.editorPaneDiff = new JEditorPane("text/html", "");
+            this.editorPaneDiff.setEditable(false);
+            this.btnDiff = new JButton("Diff");
             this.sourcePanels = new LinkedHashMap<>();
             this.targetPanels = new LinkedHashMap<>();
         }
@@ -165,11 +217,11 @@ public class ComparePanel extends JPanel {
          * @return Builder 自身
          */
         public Builder addAuthObject(String name) {
-            MessagePanel sourcePanel = new MessagePanel.Builder().build();
+            MessagePanel sourcePanel = new MessagePanel(api);
             sourcePanels.put(name, sourcePanel);
             tabbedSource.addTab(name, sourcePanel);
 
-            MessagePanel targetPanel = new MessagePanel.Builder().build();
+            MessagePanel targetPanel = new MessagePanel(api);
             targetPanels.put(name, targetPanel);
             tabbedTarget.addTab(name, targetPanel);
             return this;

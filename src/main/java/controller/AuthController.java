@@ -14,6 +14,8 @@ import model.MessageDataModel;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -34,6 +36,9 @@ public class AuthController {
     /** 记录编号计数器 */
     private final AtomicInteger idCounter;
 
+    /** 已处理请求的去重集合（key = method + url） */
+    private final Set<String> processedRequests;
+
     /**
      * 构造核心控制器
      *
@@ -49,6 +54,19 @@ public class AuthController {
         this.diffService = diffService;
         this.samples = new ArrayList<>();
         this.idCounter = new AtomicInteger(0);
+        this.processedRequests = ConcurrentHashMap.newKeySet();
+    }
+
+    /**
+     * 检查请求是否已处理过（去重）
+     *
+     * @param method HTTP 方法
+     * @param url    请求 URL
+     * @return true 表示是新请求（未处理过），false 表示重复请求
+     */
+    public boolean isNewRequest(String method, String url) {
+        String key = method + " " + url;
+        return processedRequests.add(key);
     }
 
     /**
@@ -134,6 +152,7 @@ public class AuthController {
     public void clearAll() {
         samples.clear();
         idCounter.set(0);
+        processedRequests.clear();
     }
 }
 

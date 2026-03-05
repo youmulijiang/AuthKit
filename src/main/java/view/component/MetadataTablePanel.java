@@ -84,7 +84,7 @@ public class MetadataTablePanel extends JPanel {
      * @param hash       哈希值
      * @param paramCount 参数个数
      */
-    public void updateRow(String name, int statusCode, int length, String hash, int paramCount) {
+    public void updateRow(String name, int statusCode, int length, int hash, int paramCount) {
         int rowIndex = authRows.indexOf(name);
         if (rowIndex < 0) {
             return;
