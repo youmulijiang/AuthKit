@@ -211,6 +211,34 @@ public class ComparePanel extends JPanel {
     }
 
     /**
+     * 运行时重命名一个鉴权对象，同时更新 Source 和 Target 的 Tab 标题和 Map key
+     *
+     * @param oldName 旧名称
+     * @param newName 新名称
+     */
+    public void renameAuthObject(String oldName, String newName) {
+        // 更新 Source
+        MessagePanel sourcePanel = sourcePanels.remove(oldName);
+        if (sourcePanel != null) {
+            sourcePanels.put(newName, sourcePanel);
+            int idx = tabbedSource.indexOfComponent(sourcePanel);
+            if (idx >= 0) {
+                tabbedSource.setTitleAt(idx, newName);
+            }
+        }
+
+        // 更新 Target
+        MessagePanel targetPanel = targetPanels.remove(oldName);
+        if (targetPanel != null) {
+            targetPanels.put(newName, targetPanel);
+            int idx = tabbedTarget.indexOfComponent(targetPanel);
+            if (idx >= 0) {
+                tabbedTarget.setTitleAt(idx, newName);
+            }
+        }
+    }
+
+    /**
      * 运行时动态移除一个鉴权对象，同时从 Source 和 Target 移除对应的 Tab
      *
      * @param name 鉴权对象名称

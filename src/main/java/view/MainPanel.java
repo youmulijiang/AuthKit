@@ -91,6 +91,12 @@ public class MainPanel extends JPanel {
             panelMetadataTable.removeAuthRow(name);
             panelCompare.removeAuthObject(name);
         });
+
+        panelUser.onUserRenamed((oldName, newName) -> {
+            panelDataTable.renameAuthColumn(oldName, newName);
+            panelMetadataTable.renameAuthRow(oldName, newName);
+            panelCompare.renameAuthObject(oldName, newName);
+        });
     }
 
     /** 获取工具栏面板 */

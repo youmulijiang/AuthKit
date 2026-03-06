@@ -76,6 +76,21 @@ public class DataTablePanel extends JPanel {
         rebuildColumns();
     }
 
+    /**
+     * 重命名一个鉴权对象列
+     *
+     * @param oldName 旧名称
+     * @param newName 新名称
+     */
+    public void renameAuthColumn(String oldName, String newName) {
+        int index = authColumns.indexOf(oldName);
+        if (index < 0) {
+            return;
+        }
+        authColumns.set(index, newName);
+        rebuildColumns();
+    }
+
     /** 重建表格列（保留数据行） */
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void rebuildColumns() {

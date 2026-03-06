@@ -2,12 +2,15 @@ package view.component;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
@@ -35,6 +38,9 @@ public class UserPanel extends JPanel {
 
     /** 用户删除回调列表 */
     private final List<Consumer<String>> onUserRemovedListeners = new ArrayList<>();
+
+    /** 用户重命名回调列表：(oldName, newName) */
+    private final List<BiConsumer<String, String>> onUserRenamedListeners = new ArrayList<>();
 
     private UserPanel(Builder builder) {
         this.tabbedUsers = builder.tabbedUsers;
@@ -87,13 +93,79 @@ public class UserPanel extends JPanel {
         int addTabIndex = tabbedUsers.indexOfComponent(PLACEHOLDER_ADD);
         tabbedUsers.insertTab(name, null, configPanel, null, addTabIndex);
 
-        // 设置可关闭的选项卡头部
-        CloseableTabHeader header = new CloseableTabHeader(name, () -> removeUser(name));
+        // 设置可关闭的选项卡头部（使用当前名称查找，而非捕获初始名称）
+        CloseableTabHeader header = new CloseableTabHeader(name,
+                () -> removeUser(findKeyByPanel(configPanel)));
         tabbedUsers.setTabComponentAt(addTabIndex, header);
+
+        // 监听用户名输入框失焦，检测名称变更并同步
+        configPanel.getTextFieldName().addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusLost(FocusEvent e) {
+                String oldName = findKeyByPanel(configPanel);
+                String newName = configPanel.getUserName();
+                if (oldName != null && !oldName.equals(newName) && !newName.isEmpty()) {
+                    renameUser(oldName, newName, configPanel);
+                }
+            }
+        });
 
         tabbedUsers.setSelectedComponent(configPanel);
         onUserAddedListeners.forEach(listener -> listener.accept(name));
         return configPanel;
+    }
+
+    /**
+     * 重命名鉴权用户：更新 map key、Tab 标题、CloseableTabHeader，触发回调
+     */
+    private void renameUser(String oldName, String newName, AuthUserConfigPanel configPanel) {
+        // 新名称已存在，弹窗提示并恢复旧名称
+        if (userPanels.containsKey(newName)) {
+            JOptionPane.showMessageDialog(this,
+                    "The name \"" + newName + "\" is already in use. Please choose a different name.",
+                    "Duplicate Name",
+                    JOptionPane.WARNING_MESSAGE);
+            configPanel.getTextFieldName().setText(oldName);
+            configPanel.getTextFieldName().requestFocusInWindow();
+            return;
+        }
+
+        // 更新 map：保持插入顺序
+        LinkedHashMap<String, AuthUserConfigPanel> newMap = new LinkedHashMap<>();
+        for (Map.Entry<String, AuthUserConfigPanel> entry : userPanels.entrySet()) {
+            if (entry.getKey().equals(oldName)) {
+                newMap.put(newName, entry.getValue());
+            } else {
+                newMap.put(entry.getKey(), entry.getValue());
+            }
+        }
+        userPanels.clear();
+        userPanels.putAll(newMap);
+
+        // 更新 Tab 标题
+        int tabIndex = tabbedUsers.indexOfComponent(configPanel);
+        if (tabIndex >= 0) {
+            tabbedUsers.setTitleAt(tabIndex, newName);
+            // 更新 CloseableTabHeader 的显示文本
+            Component tabComponent = tabbedUsers.getTabComponentAt(tabIndex);
+            if (tabComponent instanceof CloseableTabHeader) {
+                ((CloseableTabHeader) tabComponent).setTitle(newName);
+            }
+        }
+
+        onUserRenamedListeners.forEach(listener -> listener.accept(oldName, newName));
+    }
+
+    /**
+     * 通过 panel 实例反查当前 map 中的 key
+     */
+    private String findKeyByPanel(AuthUserConfigPanel panel) {
+        for (Map.Entry<String, AuthUserConfigPanel> entry : userPanels.entrySet()) {
+            if (entry.getValue() == panel) {
+                return entry.getKey();
+            }
+        }
+        return null;
     }
 
     /**
@@ -129,6 +201,15 @@ public class UserPanel extends JPanel {
      */
     public void onUserRemoved(Consumer<String> listener) {
         onUserRemovedListeners.add(listener);
+    }
+
+    /**
+     * 注册用户重命名回调
+     *
+     * @param listener 回调函数，参数为 (oldName, newName)
+     */
+    public void onUserRenamed(BiConsumer<String, String> listener) {
+        onUserRenamedListeners.add(listener);
     }
 
     /** 获取鉴权对象 TabbedPane */

@@ -67,6 +67,22 @@ public class MetadataTablePanel extends JPanel {
         rebuildRows();
     }
 
+    /**
+     * 重命名一个鉴权对象行
+     *
+     * @param oldName 旧名称
+     * @param newName 新名称
+     */
+    public void renameAuthRow(String oldName, String newName) {
+        int index = authRows.indexOf(oldName);
+        if (index < 0) {
+            return;
+        }
+        authRows.set(index, newName);
+        // 更新表格中第一列的显示名称
+        tableModel.setValueAt(newName, index, 0);
+    }
+
     /** 重建透视表行（每个鉴权对象一行，数据清空） */
     private void rebuildRows() {
         tableModel.setRowCount(0);
