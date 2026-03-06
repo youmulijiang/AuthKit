@@ -18,6 +18,9 @@ import java.awt.*;
  */
 public class MessagePanel extends JPanel {
 
+    public static final int REQUEST_TAB_INDEX = 0;
+    public static final int RESPONSE_TAB_INDEX = 1;
+
     private final JTabbedPane tabbedMessage;
     private final HttpRequestEditor requestEditor;
     private final HttpResponseEditor responseEditor;
@@ -84,5 +87,13 @@ public class MessagePanel extends JPanel {
      */
     public int getSelectedTabIndex() {
         return tabbedMessage.getSelectedIndex();
+    }
+
+    /** 设置当前选中的报文 Tab */
+    public void setSelectedTabIndex(int tabIndex) {
+        if (tabIndex < 0 || tabIndex >= tabbedMessage.getTabCount()) {
+            return;
+        }
+        tabbedMessage.setSelectedIndex(tabIndex);
     }
 }

@@ -36,6 +36,9 @@ public class ComparePanel extends JPanel {
     /** Montoya API 引用，用于运行时创建新的 MessagePanel */
     private final MontoyaApi api;
 
+    /** 防止 Source/Target 双向同步时递归触发 */
+    private boolean syncingMessageTabs;
+
     private ComparePanel(Builder builder) {
         this.api = builder.api;
         this.tabbedSource = builder.tabbedSource;
@@ -52,15 +55,15 @@ public class ComparePanel extends JPanel {
     private void initLayout() {
         setLayout(new BorderLayout());
 
-        // 区域1: 选择区
-        JPanel panelSource = new JPanel(new BorderLayout());
-        panelSource.add(new JLabel("  Source"), BorderLayout.NORTH);
-        panelSource.add(tabbedSource, BorderLayout.CENTER);
-
-        // 区域2: 被选择区
+        // 区域1: 被选择区
         JPanel panelTarget = new JPanel(new BorderLayout());
         panelTarget.add(new JLabel("  Target"), BorderLayout.NORTH);
         panelTarget.add(tabbedTarget, BorderLayout.CENTER);
+
+        // 区域2: 选择区
+        JPanel panelSource = new JPanel(new BorderLayout());
+        panelSource.add(new JLabel("  Source"), BorderLayout.NORTH);
+        panelSource.add(tabbedSource, BorderLayout.CENTER);
 
         // 区域3: Diff 展示区（含 Diff 按钮）
         JPanel panelDiffHeader = new JPanel(new BorderLayout());
@@ -71,40 +74,53 @@ public class ComparePanel extends JPanel {
         panelDiff.add(panelDiffHeader, BorderLayout.NORTH);
         panelDiff.add(new JScrollPane(editorPaneDiff), BorderLayout.CENTER);
 
-        JSplitPane splitBottom = new JSplitPane(JSplitPane.VERTICAL_SPLIT, panelTarget, panelDiff);
+        JSplitPane splitBottom = new JSplitPane(JSplitPane.VERTICAL_SPLIT, panelSource, panelDiff);
         splitBottom.setResizeWeight(0.5);
 
-        JSplitPane splitMain = new JSplitPane(JSplitPane.VERTICAL_SPLIT, panelSource, splitBottom);
+        JSplitPane splitMain = new JSplitPane(JSplitPane.VERTICAL_SPLIT, panelTarget, splitBottom);
         splitMain.setResizeWeight(0.33);
 
         add(splitMain, BorderLayout.CENTER);
     }
 
     /**
-     * 初始化 Source/Target 内部 Tab 同步
-     * 当 Source 选中的 MessagePanel 切换 Request/Response Tab 时，
-     * Target 选中的 MessagePanel 也同步切换到相同的 Tab。
+     * 初始化 Source/Target 内部 Tab 双向同步
      */
     private void initTabSync() {
-        // 监听 Source 中每个 MessagePanel 的内部 Tab 切换
         for (MessagePanel panel : sourcePanels.values()) {
-            panel.getTabbedMessage().addChangeListener(e -> syncTargetTab());
+            bindMessagePanelSync(panel, true);
         }
-        // 监听 Source 外层 Tab 切换（切换鉴权对象时也同步）
-        tabbedSource.addChangeListener(e -> syncTargetTab());
+        for (MessagePanel panel : targetPanels.values()) {
+            bindMessagePanelSync(panel, false);
+        }
+
+        tabbedSource.addChangeListener(e -> syncSelectedMessageTab(true));
+        tabbedTarget.addChangeListener(e -> syncSelectedMessageTab(false));
     }
 
-    /**
-     * 同步 Target 当前选中的 MessagePanel 的内部 Tab 到与 Source 一致
-     */
-    private void syncTargetTab() {
-        MessagePanel sourcePanel = getSelectedSourcePanel();
-        MessagePanel targetPanel = getSelectedTargetPanel();
-        if (sourcePanel != null && targetPanel != null) {
-            int sourceTabIndex = sourcePanel.getSelectedTabIndex();
-            if (targetPanel.getSelectedTabIndex() != sourceTabIndex) {
-                targetPanel.getTabbedMessage().setSelectedIndex(sourceTabIndex);
-            }
+    /** 给 MessagePanel 注册双向同步监听 */
+    private void bindMessagePanelSync(MessagePanel panel, boolean sourceSide) {
+        panel.getTabbedMessage().addChangeListener(e -> syncSelectedMessageTab(sourceSide));
+    }
+
+    /** 按当前选中的 Source/Target 同步内部 Request/Response 页签 */
+    private void syncSelectedMessageTab(boolean sourceSide) {
+        MessagePanel fromPanel = sourceSide ? getSelectedSourcePanel() : getSelectedTargetPanel();
+        MessagePanel toPanel = sourceSide ? getSelectedTargetPanel() : getSelectedSourcePanel();
+        if (fromPanel == null || toPanel == null || syncingMessageTabs) {
+            return;
+        }
+
+        int selectedTabIndex = fromPanel.getSelectedTabIndex();
+        if (toPanel.getSelectedTabIndex() == selectedTabIndex) {
+            return;
+        }
+
+        syncingMessageTabs = true;
+        try {
+            toPanel.setSelectedTabIndex(selectedTabIndex);
+        } finally {
+            syncingMessageTabs = false;
         }
     }
 
@@ -166,6 +182,32 @@ public class ComparePanel extends JPanel {
         return targetPanels.get(name);
     }
 
+    /** 根据鉴权对象名称切换 Target 外层选项卡 */
+    public boolean selectTargetTab(String name) {
+        MessagePanel panel = targetPanels.get(name);
+        if (panel == null) {
+            return false;
+        }
+        tabbedTarget.setSelectedComponent(panel);
+        return true;
+    }
+
+    /** 切换 Source 当前选中对象的报文页签 */
+    public void selectSourceMessageTab(int tabIndex) {
+        MessagePanel panel = getSelectedSourcePanel();
+        if (panel != null) {
+            panel.setSelectedTabIndex(tabIndex);
+        }
+    }
+
+    /** 切换 Target 当前选中对象的报文页签 */
+    public void selectTargetMessageTab(int tabIndex) {
+        MessagePanel panel = getSelectedTargetPanel();
+        if (panel != null) {
+            panel.setSelectedTabIndex(tabIndex);
+        }
+    }
+
     /** 获取选择区所有 MessagePanel 映射 */
     public Map<String, MessagePanel> getSourcePanels() {
         return Map.copyOf(sourcePanels);
@@ -202,12 +244,12 @@ public class ComparePanel extends JPanel {
         MessagePanel sourcePanel = new MessagePanel(api);
         sourcePanels.put(name, sourcePanel);
         tabbedSource.addTab(name, sourcePanel);
-        // 注册新 Tab 的内部 Tab 同步监听
-        sourcePanel.getTabbedMessage().addChangeListener(e -> syncTargetTab());
+        bindMessagePanelSync(sourcePanel, true);
 
         MessagePanel targetPanel = new MessagePanel(api);
         targetPanels.put(name, targetPanel);
         tabbedTarget.addTab(name, targetPanel);
+        bindMessagePanelSync(targetPanel, false);
     }
 
     /**

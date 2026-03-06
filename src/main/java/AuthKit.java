@@ -21,6 +21,8 @@ import view.component.*;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +32,8 @@ import java.util.concurrent.Executors;
 
 
 public class AuthKit implements BurpExtension {
+
+    private static final int DATA_TABLE_FIXED_COLUMN_COUNT = 3;
 
     private ExecutorService executor;
 
@@ -268,22 +272,63 @@ public class AuthKit implements BurpExtension {
      * 绑定 DataTable 行选中事件
      */
     private void bindTableSelection(MainPanel mainPanel, AuthController controller) {
-        mainPanel.getPanelDataTable().getTableData().getSelectionModel()
+        JTable table = mainPanel.getPanelDataTable().getTableData();
+
+        table.getSelectionModel()
                 .addListSelectionListener(e -> {
                     if (e.getValueIsAdjusting()) {
                         return;
                     }
-                    int selectedRow = mainPanel.getPanelDataTable().getSelectedRow();
-                    if (selectedRow < 0) {
-                        return;
-                    }
-                    CompareSampleModel sample = controller.getSample(selectedRow);
-                    if (sample == null) {
-                        return;
-                    }
-                    updateMetadataTable(mainPanel.getPanelMetadataTable(), sample);
-                    updateComparePanel(mainPanel.getPanelCompare(), sample);
+                    updateSelectedSample(mainPanel, controller,
+                            mainPanel.getPanelDataTable().getSelectedRow());
                 });
+
+        table.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                handleTableCellClick(mainPanel, controller,
+                        table.rowAtPoint(e.getPoint()),
+                        table.columnAtPoint(e.getPoint()));
+            }
+        });
+    }
+
+    /** 更新当前选中样本对应的 Metadata 和 Compare 区域 */
+    private void updateSelectedSample(MainPanel mainPanel, AuthController controller, int modelRow) {
+        if (modelRow < 0) {
+            return;
+        }
+
+        CompareSampleModel sample = controller.getSample(modelRow);
+        if (sample == null) {
+            return;
+        }
+
+        updateMetadataTable(mainPanel.getPanelMetadataTable(), sample);
+        updateComparePanel(mainPanel.getPanelCompare(), sample);
+    }
+
+    /** 处理 DataTable 单元格点击联动 */
+    private void handleTableCellClick(MainPanel mainPanel, AuthController controller,
+                                      int viewRow, int viewColumn) {
+        if (viewRow < 0 || viewColumn < 0) {
+            return;
+        }
+
+        JTable table = mainPanel.getPanelDataTable().getTableData();
+        int modelRow = table.convertRowIndexToModel(viewRow);
+        updateSelectedSample(mainPanel, controller, modelRow);
+
+        int modelColumn = table.convertColumnIndexToModel(viewColumn);
+        if (modelColumn < DATA_TABLE_FIXED_COLUMN_COUNT) {
+            return;
+        }
+
+        String authName = table.getModel().getColumnName(modelColumn);
+        ComparePanel comparePanel = mainPanel.getPanelCompare();
+        if (comparePanel.selectTargetTab(authName)) {
+            comparePanel.selectTargetMessageTab(MessagePanel.RESPONSE_TAB_INDEX);
+        }
     }
 
     /**
