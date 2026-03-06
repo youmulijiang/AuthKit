@@ -1,5 +1,7 @@
 package model;
 
+import burp.api.montoya.core.ToolType;
+
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -24,6 +26,10 @@ public class ConfigModel {
     private boolean pathFilterEnabled;
     private boolean statusCodeFilterEnabled;
     private boolean extensionFilterEnabled;
+    private boolean proxyScopeEnabled;
+    private boolean repeaterScopeEnabled;
+    private boolean intruderScopeEnabled;
+    private boolean extensionsScopeEnabled;
 
     private String rawDomains;
     private String rawFilterMethods;
@@ -39,6 +45,10 @@ public class ConfigModel {
         this.pathFilterEnabled = false;
         this.statusCodeFilterEnabled = true;
         this.extensionFilterEnabled = true;
+        this.proxyScopeEnabled = true;
+        this.repeaterScopeEnabled = true;
+        this.intruderScopeEnabled = false;
+        this.extensionsScopeEnabled = false;
         this.rawDomains = "";
         this.rawFilterMethods = "";
         this.rawFilterPaths = "";
@@ -130,6 +140,46 @@ public class ConfigModel {
     /** 设置后缀黑名单过滤开关 */
     public void setExtensionFilterEnabled(boolean extensionFilterEnabled) {
         this.extensionFilterEnabled = extensionFilterEnabled;
+    }
+
+    /** Proxy Scope 是否启用 */
+    public boolean isProxyScopeEnabled() {
+        return proxyScopeEnabled;
+    }
+
+    /** 设置 Proxy Scope 开关 */
+    public void setProxyScopeEnabled(boolean proxyScopeEnabled) {
+        this.proxyScopeEnabled = proxyScopeEnabled;
+    }
+
+    /** Repeater Scope 是否启用 */
+    public boolean isRepeaterScopeEnabled() {
+        return repeaterScopeEnabled;
+    }
+
+    /** 设置 Repeater Scope 开关 */
+    public void setRepeaterScopeEnabled(boolean repeaterScopeEnabled) {
+        this.repeaterScopeEnabled = repeaterScopeEnabled;
+    }
+
+    /** Intruder Scope 是否启用 */
+    public boolean isIntruderScopeEnabled() {
+        return intruderScopeEnabled;
+    }
+
+    /** 设置 Intruder Scope 开关 */
+    public void setIntruderScopeEnabled(boolean intruderScopeEnabled) {
+        this.intruderScopeEnabled = intruderScopeEnabled;
+    }
+
+    /** Extensions Scope 是否启用 */
+    public boolean isExtensionsScopeEnabled() {
+        return extensionsScopeEnabled;
+    }
+
+    /** 设置 Extensions Scope 开关 */
+    public void setExtensionsScopeEnabled(boolean extensionsScopeEnabled) {
+        this.extensionsScopeEnabled = extensionsScopeEnabled;
     }
 
     /** 设置原始后缀黑名单文本 */
@@ -285,6 +335,21 @@ public class ConfigModel {
             return false;
         }
         return getFilterStatusCodes().contains(statusCode);
+    }
+
+    /** 判断是否应按 Tool Type 过滤 */
+    public boolean shouldFilterToolType(ToolType toolType) {
+        if (toolType == null) {
+            return false;
+        }
+
+        return switch (toolType) {
+            case PROXY -> !proxyScopeEnabled;
+            case REPEATER -> !repeaterScopeEnabled;
+            case INTRUDER -> !intruderScopeEnabled;
+            case EXTENSIONS -> !extensionsScopeEnabled;
+            default -> true;
+        };
     }
 
     /** 解析多行文本为列表（去空行、去首尾空格） */

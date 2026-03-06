@@ -208,6 +208,14 @@ public class AuthKit implements BurpExtension {
                 model.setEnabled(panel.getCheckBoxEnabled().isSelected()));
         panel.getCheckBoxDomainFilter().addActionListener(e ->
                 model.setDomainFilterEnabled(panel.getCheckBoxDomainFilter().isSelected()));
+        panel.getCheckBoxScopeProxy().addActionListener(e ->
+                model.setProxyScopeEnabled(panel.getCheckBoxScopeProxy().isSelected()));
+        panel.getCheckBoxScopeRepeater().addActionListener(e ->
+                model.setRepeaterScopeEnabled(panel.getCheckBoxScopeRepeater().isSelected()));
+        panel.getCheckBoxScopeIntruder().addActionListener(e ->
+                model.setIntruderScopeEnabled(panel.getCheckBoxScopeIntruder().isSelected()));
+        panel.getCheckBoxScopeExtensions().addActionListener(e ->
+                model.setExtensionsScopeEnabled(panel.getCheckBoxScopeExtensions().isSelected()));
         panel.getCheckBoxMethodFilter().addActionListener(e ->
                 model.setMethodFilterEnabled(panel.getCheckBoxMethodFilter().isSelected()));
         panel.getCheckBoxPathFilter().addActionListener(e ->
@@ -258,6 +266,10 @@ public class AuthKit implements BurpExtension {
         // 初始同步默认值
         model.setEnabled(panel.getCheckBoxEnabled().isSelected());
         model.setDomainFilterEnabled(panel.getCheckBoxDomainFilter().isSelected());
+        model.setProxyScopeEnabled(panel.getCheckBoxScopeProxy().isSelected());
+        model.setRepeaterScopeEnabled(panel.getCheckBoxScopeRepeater().isSelected());
+        model.setIntruderScopeEnabled(panel.getCheckBoxScopeIntruder().isSelected());
+        model.setExtensionsScopeEnabled(panel.getCheckBoxScopeExtensions().isSelected());
         model.setMethodFilterEnabled(panel.getCheckBoxMethodFilter().isSelected());
         model.setPathFilterEnabled(panel.getCheckBoxPathFilter().isSelected());
         model.setStatusCodeFilterEnabled(panel.getCheckBoxStatusCodeFilter().isSelected());

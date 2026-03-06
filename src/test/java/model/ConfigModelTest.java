@@ -1,5 +1,7 @@
 package model;
 
+import burp.api.montoya.core.ToolType;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -100,6 +102,34 @@ class ConfigModelTest {
         assertFalse(config.isMethodFilterEnabled());
         assertFalse(config.isPathFilterEnabled());
         assertTrue(config.isStatusCodeFilterEnabled());
+        assertTrue(config.isProxyScopeEnabled());
+        assertTrue(config.isRepeaterScopeEnabled());
+        assertFalse(config.isIntruderScopeEnabled());
+        assertFalse(config.isExtensionsScopeEnabled());
+    }
+
+    @Test
+    @DisplayName("Tool Type Scope 默认应仅放行 Proxy 和 Repeater")
+    void toolTypeScope_shouldHaveCorrectDefaults() {
+        ConfigModel config = new ConfigModel();
+
+        assertFalse(config.shouldFilterToolType(ToolType.PROXY));
+        assertFalse(config.shouldFilterToolType(ToolType.REPEATER));
+        assertTrue(config.shouldFilterToolType(ToolType.INTRUDER));
+        assertTrue(config.shouldFilterToolType(ToolType.EXTENSIONS));
+    }
+
+    @Test
+    @DisplayName("Tool Type Scope 自定义开关应生效")
+    void toolTypeScope_shouldRespectCustomSettings() {
+        ConfigModel config = new ConfigModel();
+        config.setProxyScopeEnabled(false);
+        config.setIntruderScopeEnabled(true);
+        config.setExtensionsScopeEnabled(true);
+
+        assertTrue(config.shouldFilterToolType(ToolType.PROXY));
+        assertFalse(config.shouldFilterToolType(ToolType.INTRUDER));
+        assertFalse(config.shouldFilterToolType(ToolType.EXTENSIONS));
     }
 
     @Test

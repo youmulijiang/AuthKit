@@ -1,5 +1,6 @@
 package core;
 
+import burp.api.montoya.core.ToolType;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;
 import model.ConfigModel;
@@ -160,6 +161,41 @@ class HttpRequestHandlerTest {
         when(request.path()).thenReturn("/api/users");
 
         assertTrue(handler.shouldProcess(request, 200));
+    }
+
+    @Test
+    @DisplayName("默认 Tool Type Scope 应放行 Proxy 请求")
+    void toolTypeScope_proxy_shouldPassByDefault() {
+        HttpRequest request = mock(HttpRequest.class);
+        when(request.method()).thenReturn("GET");
+        when(request.url()).thenReturn("http://example.com/api/users");
+        when(request.path()).thenReturn("/api/users");
+
+        assertTrue(handler.shouldProcess(request, 200, ToolType.PROXY));
+    }
+
+    @Test
+    @DisplayName("默认 Tool Type Scope 应过滤 Intruder 请求")
+    void toolTypeScope_intruder_shouldBeFilteredByDefault() {
+        HttpRequest request = mock(HttpRequest.class);
+        when(request.method()).thenReturn("GET");
+        when(request.url()).thenReturn("http://example.com/api/users");
+        when(request.path()).thenReturn("/api/users");
+
+        assertFalse(handler.shouldProcess(request, 200, ToolType.INTRUDER));
+    }
+
+    @Test
+    @DisplayName("启用 Extensions Scope 后应放行 Extensions 请求")
+    void toolTypeScope_extensions_shouldPassWhenEnabled() {
+        configModel.setExtensionsScopeEnabled(true);
+
+        HttpRequest request = mock(HttpRequest.class);
+        when(request.method()).thenReturn("GET");
+        when(request.url()).thenReturn("http://example.com/api/users");
+        when(request.path()).thenReturn("/api/users");
+
+        assertTrue(handler.shouldProcess(request, 200, ToolType.EXTENSIONS));
     }
 }
 

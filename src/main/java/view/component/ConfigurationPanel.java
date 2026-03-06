@@ -29,6 +29,12 @@ public class ConfigurationPanel extends JPanel {
     private final JCheckBox checkBoxDomainFilter;
     private final JTextArea textAreaDomain;
 
+    // ===== Tool Type Scope =====
+    private final JCheckBox checkBoxScopeProxy;
+    private final JCheckBox checkBoxScopeRepeater;
+    private final JCheckBox checkBoxScopeIntruder;
+    private final JCheckBox checkBoxScopeExtensions;
+
     // ===== 请求过滤规则 =====
     private final JCheckBox checkBoxMethodFilter;
     private final JTextField textFieldMethod;
@@ -50,6 +56,10 @@ public class ConfigurationPanel extends JPanel {
         this.comboBoxDisplayMetric = builder.comboBoxDisplayMetric;
         this.checkBoxDomainFilter = builder.checkBoxDomainFilter;
         this.textAreaDomain = builder.textAreaDomain;
+        this.checkBoxScopeProxy = builder.checkBoxScopeProxy;
+        this.checkBoxScopeRepeater = builder.checkBoxScopeRepeater;
+        this.checkBoxScopeIntruder = builder.checkBoxScopeIntruder;
+        this.checkBoxScopeExtensions = builder.checkBoxScopeExtensions;
         this.checkBoxMethodFilter = builder.checkBoxMethodFilter;
         this.textFieldMethod = builder.textFieldMethod;
         this.checkBoxPathFilter = builder.checkBoxPathFilter;
@@ -96,6 +106,10 @@ public class ConfigurationPanel extends JPanel {
 
         // 复选框和下拉框也联动
         checkBoxDomainFilter.setEnabled(editable);
+        checkBoxScopeProxy.setEnabled(editable);
+        checkBoxScopeRepeater.setEnabled(editable);
+        checkBoxScopeIntruder.setEnabled(editable);
+        checkBoxScopeExtensions.setEnabled(editable);
         checkBoxMethodFilter.setEnabled(editable);
         checkBoxPathFilter.setEnabled(editable);
         checkBoxStatusCodeFilter.setEnabled(editable);
@@ -112,6 +126,8 @@ public class ConfigurationPanel extends JPanel {
         panelContent.add(buildBasicControlSection());
         panelContent.add(Box.createVerticalStrut(5));
         panelContent.add(buildDomainSection());
+        panelContent.add(Box.createVerticalStrut(5));
+        panelContent.add(buildToolTypeScopeSection());
         panelContent.add(Box.createVerticalStrut(5));
         panelContent.add(buildFilterSection());
         panelContent.add(Box.createVerticalStrut(5));
@@ -142,6 +158,18 @@ public class ConfigurationPanel extends JPanel {
         panel.add(new JScrollPane(textAreaDomain), BorderLayout.CENTER);
         panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 150));
         panel.setPreferredSize(new Dimension(0, 120));
+        return panel;
+    }
+
+    /** 构建 Tool Type Scope 区 */
+    private JPanel buildToolTypeScopeSection() {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        panel.setBorder(new TitledBorder("Tool Type Scope"));
+        panel.add(checkBoxScopeProxy);
+        panel.add(checkBoxScopeRepeater);
+        panel.add(checkBoxScopeIntruder);
+        panel.add(checkBoxScopeExtensions);
+        panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 65));
         return panel;
     }
 
@@ -229,6 +257,26 @@ public class ConfigurationPanel extends JPanel {
         return textAreaDomain;
     }
 
+    /** 获取 Proxy Scope 开关 */
+    public JCheckBox getCheckBoxScopeProxy() {
+        return checkBoxScopeProxy;
+    }
+
+    /** 获取 Repeater Scope 开关 */
+    public JCheckBox getCheckBoxScopeRepeater() {
+        return checkBoxScopeRepeater;
+    }
+
+    /** 获取 Intruder Scope 开关 */
+    public JCheckBox getCheckBoxScopeIntruder() {
+        return checkBoxScopeIntruder;
+    }
+
+    /** 获取 Extensions Scope 开关 */
+    public JCheckBox getCheckBoxScopeExtensions() {
+        return checkBoxScopeExtensions;
+    }
+
     /** 获取 HTTP 方法过滤开关 */
     public JCheckBox getCheckBoxMethodFilter() {
         return checkBoxMethodFilter;
@@ -284,6 +332,10 @@ public class ConfigurationPanel extends JPanel {
         private final JComboBox<String> comboBoxDisplayMetric;
         private final JCheckBox checkBoxDomainFilter;
         private final JTextArea textAreaDomain;
+        private final JCheckBox checkBoxScopeProxy;
+        private final JCheckBox checkBoxScopeRepeater;
+        private final JCheckBox checkBoxScopeIntruder;
+        private final JCheckBox checkBoxScopeExtensions;
         private final JCheckBox checkBoxMethodFilter;
         private final JTextField textFieldMethod;
         private final JCheckBox checkBoxPathFilter;
@@ -306,6 +358,11 @@ public class ConfigurationPanel extends JPanel {
             this.textAreaDomain = new JTextArea();
             this.textAreaDomain.setFont(monoFont);
             this.textAreaDomain.setToolTipText("One domain per line, e.g. example.com");
+
+            this.checkBoxScopeProxy = new JCheckBox("Proxy", true);
+            this.checkBoxScopeRepeater = new JCheckBox("Repeater", true);
+            this.checkBoxScopeIntruder = new JCheckBox("Intruder", false);
+            this.checkBoxScopeExtensions = new JCheckBox("Extensions", false);
 
             this.checkBoxMethodFilter = new JCheckBox("Method Filter", false);
             this.textFieldMethod = new JTextField("OPTIONS, HEAD, CONNECT");

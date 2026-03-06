@@ -1,5 +1,6 @@
 package core;
 
+import burp.api.montoya.core.ToolSource;
 import burp.api.montoya.core.ToolType;
 import burp.api.montoya.http.handler.*;
 import burp.api.montoya.http.message.requests.HttpRequest;
@@ -62,7 +63,22 @@ public class HttpRequestHandler implements HttpHandler {
      * @return true 表示应处理，false 表示应过滤
      */
     public boolean shouldProcess(HttpRequest request, int statusCode) {
+        return shouldProcess(request, statusCode, null);
+    }
+
+    /**
+     * 判断请求是否应被处理（通过所有过滤条件）
+     *
+     * @param request    原始请求
+     * @param statusCode 响应状态码
+     * @param toolType   请求来源 ToolType
+     * @return true 表示应处理，false 表示应过滤
+     */
+    public boolean shouldProcess(HttpRequest request, int statusCode, ToolType toolType) {
         if (!configModel.isEnabled()) {
+            return false;
+        }
+        if (configModel.shouldFilterToolType(toolType)) {
             return false;
         }
         if (configModel.shouldFilterMethod(request.method())) {
@@ -91,12 +107,10 @@ public class HttpRequestHandler implements HttpHandler {
      * 过滤掉插件自身发出的请求（EXTENSIONS），避免循环发包。
      */
     private void processResponse(HttpResponseReceived responseReceived) {
-        // 过滤掉插件自身重放的请求，防止无限循环
-        if (responseReceived.toolSource().isFromTool(ToolType.EXTENSIONS)) {
-            return;
-        }
         HttpRequest request = responseReceived.initiatingRequest();
-        if (shouldProcess(request, responseReceived.statusCode())) {
+        ToolSource toolSource = responseReceived.toolSource();
+        ToolType toolType = toolSource != null ? toolSource.toolType() : null;
+        if (shouldProcess(request, responseReceived.statusCode(), toolType)) {
             onRequestCaptured.accept(request, responseReceived);
         }
     }
