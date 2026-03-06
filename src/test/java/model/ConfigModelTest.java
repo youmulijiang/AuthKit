@@ -14,10 +14,10 @@ import static org.junit.jupiter.api.Assertions.*;
 class ConfigModelTest {
 
     @Test
-    @DisplayName("默认状态应为启用")
-    void defaultState_shouldBeEnabled() {
+    @DisplayName("默认状态应为未启用")
+    void defaultState_shouldBeDisabled() {
         ConfigModel config = new ConfigModel();
-        assertTrue(config.isEnabled());
+        assertFalse(config.isEnabled());
     }
 
     @Test

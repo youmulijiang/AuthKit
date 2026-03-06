@@ -17,6 +17,9 @@ public class ConfigurationPanel extends JPanel {
     /** DataTable 鉴权列可展示的指标选项 */
     public static final String[] DISPLAY_METRICS = {"Length", "Status Code", "Hash"};
 
+    /** 禁用时文本框的背景色 */
+    private static final Color DISABLED_BG = new Color(230, 230, 230);
+
     // ===== 基础控制区 =====
     private final JCheckBox checkBoxEnabled;
     private final JButton btnClearTable;
@@ -57,6 +60,47 @@ public class ConfigurationPanel extends JPanel {
         this.textFieldExtensionBlacklist = builder.textFieldExtensionBlacklist;
         this.textAreaAuthHeaders = builder.textAreaAuthHeaders;
         initLayout();
+        // 根据默认状态设置可编辑性
+        setConfigEditable(checkBoxEnabled.isSelected());
+        // 绑定启停联动
+        checkBoxEnabled.addActionListener(e -> setConfigEditable(checkBoxEnabled.isSelected()));
+    }
+
+    /**
+     * 根据插件启停状态设置所有配置文本框的可编辑性和背景色。
+     * 启用插件时锁定配置（不可编辑、浅灰色背景），未启用时可自由编辑。
+     *
+     * @param pluginEnabled 插件是否启用
+     */
+    private void setConfigEditable(boolean pluginEnabled) {
+        boolean editable = !pluginEnabled;
+        Color bg = editable ? Color.WHITE : DISABLED_BG;
+
+        textAreaDomain.setEditable(editable);
+        textAreaDomain.setBackground(bg);
+
+        textFieldMethod.setEditable(editable);
+        textFieldMethod.setBackground(bg);
+
+        textAreaPath.setEditable(editable);
+        textAreaPath.setBackground(bg);
+
+        textFieldStatusCode.setEditable(editable);
+        textFieldStatusCode.setBackground(bg);
+
+        textFieldExtensionBlacklist.setEditable(editable);
+        textFieldExtensionBlacklist.setBackground(bg);
+
+        textAreaAuthHeaders.setEditable(editable);
+        textAreaAuthHeaders.setBackground(bg);
+
+        // 复选框和下拉框也联动
+        checkBoxDomainFilter.setEnabled(editable);
+        checkBoxMethodFilter.setEnabled(editable);
+        checkBoxPathFilter.setEnabled(editable);
+        checkBoxStatusCodeFilter.setEnabled(editable);
+        checkBoxExtensionFilter.setEnabled(editable);
+        comboBoxDisplayMetric.setEnabled(editable);
     }
 
     /** 初始化布局 */
@@ -253,7 +297,7 @@ public class ConfigurationPanel extends JPanel {
         public Builder() {
             Font monoFont = new Font("Monospaced", Font.PLAIN, 12);
 
-            this.checkBoxEnabled = new JCheckBox("Enable Plugin", true);
+            this.checkBoxEnabled = new JCheckBox("Enable Plugin", false);
             this.btnClearTable = new JButton("Clear Table");
             this.comboBoxDisplayMetric = new JComboBox<>(DISPLAY_METRICS);
             this.comboBoxDisplayMetric.setSelectedItem("Length"); // 默认展示包长度

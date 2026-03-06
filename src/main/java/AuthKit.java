@@ -487,9 +487,13 @@ public class AuthKit implements BurpExtension {
             return newName[0];
         };
 
+        // 插件启用状态提供者
+        java.util.function.Supplier<Boolean> enabledSupplier =
+                () -> mainPanel.getPanelConfiguration().getCheckBoxEnabled().isSelected();
+
         AuthContextMenuProvider contextMenuProvider =
-                new AuthContextMenuProvider(userNamesSupplier, sendHandler,
-                        extractHandler, createUserHandler);
+                new AuthContextMenuProvider(userNamesSupplier, enabledSupplier,
+                        sendHandler, extractHandler, createUserHandler);
         montoyaApi.userInterface().registerContextMenuItemsProvider(contextMenuProvider);
     }
 

@@ -33,7 +33,7 @@ public class ConfigModel {
     private String rawExtensionBlacklist;
 
     public ConfigModel() {
-        this.enabled = true;
+        this.enabled = false;
         this.domainFilterEnabled = false;
         this.methodFilterEnabled = false;
         this.pathFilterEnabled = false;
