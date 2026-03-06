@@ -43,6 +43,8 @@ public class AuthKit implements BurpExtension {
         ApiUtils.INSTANCE.init(montoyaApi);
         montoyaApi.extension().setName("AuthKit");
 
+        printWelcomeBanner();
+
         // 创建线程池
         executor = Executors.newFixedThreadPool(3);
 
@@ -135,6 +137,15 @@ public class AuthKit implements BurpExtension {
         });
 
         LogUtils.INSTANCE.info("AuthKit 插件加载成功");
+    }
+
+    private void printWelcomeBanner() {
+        ApiUtils.INSTANCE.api().logging().logToOutput(String.format(
+                "[   Pwn The Planet, One HTTP at a Time  ]\n" +
+                        "[#] Author: youmulijiang\n" +
+                        "[#] Github: https://github.com/youmulijiang\n" +
+                        "[#] Version: 1.0.0\n"
+        ));
     }
 
     /**

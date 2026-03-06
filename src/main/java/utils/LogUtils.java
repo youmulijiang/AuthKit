@@ -13,7 +13,7 @@ public enum LogUtils {
     INSTANCE;
 
     /** 日志开关，默认开启 */
-    private volatile boolean enabled = true;
+    private volatile boolean enabled = false;
 
     /** 调试日志开关，默认关闭 */
     private volatile boolean debugEnabled = false;
