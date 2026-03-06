@@ -11,17 +11,26 @@ import java.util.Set;
  */
 public class ConfigModel {
 
+    /** 默认后缀黑名单：静态资源、字体、图片、媒体等（不含办公文件） */
+    public static final String DEFAULT_EXTENSION_BLACKLIST =
+            "css, js, jpg, jpeg, png, gif, svg, ico, bmp, webp, " +
+            "woff, woff2, ttf, eot, otf, " +
+            "mp3, mp4, avi, mov, wmv, flv, webm, " +
+            "map, less, scss, sass";
+
     private boolean enabled;
     private boolean domainFilterEnabled;
     private boolean methodFilterEnabled;
     private boolean pathFilterEnabled;
     private boolean statusCodeFilterEnabled;
+    private boolean extensionFilterEnabled;
 
     private String rawDomains;
     private String rawFilterMethods;
     private String rawFilterPaths;
     private String rawFilterStatusCodes;
     private String rawAuthHeaders;
+    private String rawExtensionBlacklist;
 
     public ConfigModel() {
         this.enabled = true;
@@ -29,11 +38,13 @@ public class ConfigModel {
         this.methodFilterEnabled = false;
         this.pathFilterEnabled = false;
         this.statusCodeFilterEnabled = true;
+        this.extensionFilterEnabled = true;
         this.rawDomains = "";
         this.rawFilterMethods = "";
         this.rawFilterPaths = "";
         this.rawFilterStatusCodes = "";
         this.rawAuthHeaders = "";
+        this.rawExtensionBlacklist = DEFAULT_EXTENSION_BLACKLIST;
     }
 
     /** 插件是否启用 */
@@ -109,6 +120,76 @@ public class ConfigModel {
     /** 设置原始认证头文本 */
     public void setRawAuthHeaders(String rawAuthHeaders) {
         this.rawAuthHeaders = rawAuthHeaders != null ? rawAuthHeaders : "";
+    }
+
+    /** 后缀黑名单过滤是否启用 */
+    public boolean isExtensionFilterEnabled() {
+        return extensionFilterEnabled;
+    }
+
+    /** 设置后缀黑名单过滤开关 */
+    public void setExtensionFilterEnabled(boolean extensionFilterEnabled) {
+        this.extensionFilterEnabled = extensionFilterEnabled;
+    }
+
+    /** 设置原始后缀黑名单文本 */
+    public void setRawExtensionBlacklist(String rawExtensionBlacklist) {
+        this.rawExtensionBlacklist = rawExtensionBlacklist != null ? rawExtensionBlacklist : "";
+    }
+
+    /** 获取原始后缀黑名单文本 */
+    public String getRawExtensionBlacklist() {
+        return rawExtensionBlacklist;
+    }
+
+    /** 解析后缀黑名单集合（逗号分隔，转小写） */
+    public Set<String> getExtensionBlacklist() {
+        Set<String> result = new HashSet<>();
+        if (rawExtensionBlacklist == null || rawExtensionBlacklist.isBlank()) {
+            return result;
+        }
+        for (String item : rawExtensionBlacklist.split(",")) {
+            String trimmed = item.trim().toLowerCase();
+            if (!trimmed.isEmpty()) {
+                result.add(trimmed);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 判断是否应根据文件后缀过滤请求
+     *
+     * @param path 请求路径
+     * @return true 表示应过滤
+     */
+    public boolean shouldFilterExtension(String path) {
+        if (!extensionFilterEnabled) {
+            return false;
+        }
+        String extension = extractExtension(path);
+        if (extension.isEmpty()) {
+            return false;
+        }
+        return getExtensionBlacklist().contains(extension.toLowerCase());
+    }
+
+    /**
+     * 从路径中提取文件后缀（不含点号）
+     */
+    private String extractExtension(String path) {
+        if (path == null || path.isEmpty()) {
+            return "";
+        }
+        // 去掉查询参数
+        int queryIndex = path.indexOf('?');
+        String cleanPath = queryIndex >= 0 ? path.substring(0, queryIndex) : path;
+        int dotIndex = cleanPath.lastIndexOf('.');
+        int slashIndex = cleanPath.lastIndexOf('/');
+        if (dotIndex > slashIndex && dotIndex < cleanPath.length() - 1) {
+            return cleanPath.substring(dotIndex + 1);
+        }
+        return "";
     }
 
     /** 解析域名白名单列表 */

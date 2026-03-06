@@ -135,5 +135,31 @@ class HttpRequestHandlerTest {
 
         assertFalse(handler.shouldProcess(request, 200));
     }
+
+    @Test
+    @DisplayName("后缀黑名单启用时应过滤静态资源请求")
+    void extensionFilter_shouldFilterStaticResources() {
+        configModel.setExtensionFilterEnabled(true);
+
+        HttpRequest request = mock(HttpRequest.class);
+        when(request.method()).thenReturn("GET");
+        when(request.url()).thenReturn("http://example.com/style.css");
+        when(request.path()).thenReturn("/style.css");
+
+        assertFalse(handler.shouldProcess(request, 200));
+    }
+
+    @Test
+    @DisplayName("后缀黑名单启用时不应过滤API请求")
+    void extensionFilter_shouldNotFilterApiRequests() {
+        configModel.setExtensionFilterEnabled(true);
+
+        HttpRequest request = mock(HttpRequest.class);
+        when(request.method()).thenReturn("GET");
+        when(request.url()).thenReturn("http://example.com/api/users");
+        when(request.path()).thenReturn("/api/users");
+
+        assertTrue(handler.shouldProcess(request, 200));
+    }
 }
 

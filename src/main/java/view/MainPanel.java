@@ -83,11 +83,13 @@ public class MainPanel extends JPanel {
         panelUser.onUserAdded(name -> {
             panelDataTable.addAuthColumn(name);
             panelMetadataTable.addAuthRow(name);
+            panelCompare.addAuthObject(name);
         });
 
         panelUser.onUserRemoved(name -> {
             panelDataTable.removeAuthColumn(name);
             panelMetadataTable.removeAuthRow(name);
+            panelCompare.removeAuthObject(name);
         });
     }
 

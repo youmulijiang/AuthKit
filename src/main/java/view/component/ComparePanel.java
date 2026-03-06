@@ -33,7 +33,11 @@ public class ComparePanel extends JPanel {
     /** 被选择区中每个鉴权对象名称 -> MessagePanel 的映射 */
     private final Map<String, MessagePanel> targetPanels;
 
+    /** Montoya API 引用，用于运行时创建新的 MessagePanel */
+    private final MontoyaApi api;
+
     private ComparePanel(Builder builder) {
+        this.api = builder.api;
         this.tabbedSource = builder.tabbedSource;
         this.tabbedTarget = builder.tabbedTarget;
         this.editorPaneDiff = builder.editorPaneDiff;
@@ -183,6 +187,50 @@ public class ComparePanel extends JPanel {
         sourcePanels.values().forEach(MessagePanel::clearContent);
         targetPanels.values().forEach(MessagePanel::clearContent);
         editorPaneDiff.setText("");
+    }
+
+    /**
+     * 运行时动态添加一个鉴权对象，同时在 Source 和 Target 创建对应的 Tab
+     *
+     * @param name 鉴权对象名称（如 "User1"）
+     */
+    public void addAuthObject(String name) {
+        if (sourcePanels.containsKey(name)) {
+            return;
+        }
+
+        MessagePanel sourcePanel = new MessagePanel(api);
+        sourcePanels.put(name, sourcePanel);
+        tabbedSource.addTab(name, sourcePanel);
+        // 注册新 Tab 的内部 Tab 同步监听
+        sourcePanel.getTabbedMessage().addChangeListener(e -> syncTargetTab());
+
+        MessagePanel targetPanel = new MessagePanel(api);
+        targetPanels.put(name, targetPanel);
+        tabbedTarget.addTab(name, targetPanel);
+    }
+
+    /**
+     * 运行时动态移除一个鉴权对象，同时从 Source 和 Target 移除对应的 Tab
+     *
+     * @param name 鉴权对象名称
+     */
+    public void removeAuthObject(String name) {
+        MessagePanel sourcePanel = sourcePanels.remove(name);
+        if (sourcePanel != null) {
+            int idx = tabbedSource.indexOfComponent(sourcePanel);
+            if (idx >= 0) {
+                tabbedSource.removeTabAt(idx);
+            }
+        }
+
+        MessagePanel targetPanel = targetPanels.remove(name);
+        if (targetPanel != null) {
+            int idx = tabbedTarget.indexOfComponent(targetPanel);
+            if (idx >= 0) {
+                tabbedTarget.removeTabAt(idx);
+            }
+        }
     }
 
     /**

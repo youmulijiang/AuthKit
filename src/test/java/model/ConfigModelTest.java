@@ -143,5 +143,71 @@ class ConfigModelTest {
         assertTrue(config.shouldFilterStatusCode(304));
         assertFalse(config.shouldFilterStatusCode(200));
     }
+
+    @Test
+    @DisplayName("后缀黑名单默认应包含常见静态资源后缀")
+    void extensionBlacklist_shouldHaveDefaults() {
+        ConfigModel config = new ConfigModel();
+        Set<String> exts = config.getExtensionBlacklist();
+        assertTrue(exts.contains("css"));
+        assertTrue(exts.contains("js"));
+        assertTrue(exts.contains("png"));
+        assertTrue(exts.contains("woff2"));
+        assertFalse(exts.contains("doc"));
+        assertFalse(exts.contains("pdf"));
+    }
+
+    @Test
+    @DisplayName("shouldFilterExtension 启用时应过滤黑名单中的后缀")
+    void shouldFilter_extensionInBlacklist() {
+        ConfigModel config = new ConfigModel();
+        config.setExtensionFilterEnabled(true);
+
+        assertTrue(config.shouldFilterExtension("/style.css"));
+        assertTrue(config.shouldFilterExtension("/app.js"));
+        assertTrue(config.shouldFilterExtension("/logo.png"));
+    }
+
+    @Test
+    @DisplayName("shouldFilterExtension 启用时不应过滤非黑名单后缀")
+    void shouldFilter_extensionNotInBlacklist() {
+        ConfigModel config = new ConfigModel();
+        config.setExtensionFilterEnabled(true);
+
+        assertFalse(config.shouldFilterExtension("/api/users"));
+        assertFalse(config.shouldFilterExtension("/report.pdf"));
+        assertFalse(config.shouldFilterExtension("/file.doc"));
+    }
+
+    @Test
+    @DisplayName("shouldFilterExtension 关闭时不应过滤任何后缀")
+    void shouldFilter_extensionFilterDisabled() {
+        ConfigModel config = new ConfigModel();
+        config.setExtensionFilterEnabled(false);
+
+        assertFalse(config.shouldFilterExtension("/style.css"));
+    }
+
+    @Test
+    @DisplayName("shouldFilterExtension 自定义黑名单应生效")
+    void shouldFilter_customExtensionBlacklist() {
+        ConfigModel config = new ConfigModel();
+        config.setExtensionFilterEnabled(true);
+        config.setRawExtensionBlacklist("abc, xyz");
+
+        assertTrue(config.shouldFilterExtension("/test.abc"));
+        assertTrue(config.shouldFilterExtension("/test.xyz"));
+        assertFalse(config.shouldFilterExtension("/test.css"));
+    }
+
+    @Test
+    @DisplayName("shouldFilterExtension 无后缀路径不应被过滤")
+    void shouldFilter_noExtension_shouldNotFilter() {
+        ConfigModel config = new ConfigModel();
+        config.setExtensionFilterEnabled(true);
+
+        assertFalse(config.shouldFilterExtension("/api/users"));
+        assertFalse(config.shouldFilterExtension("/api/v1/login"));
+    }
 }
 

@@ -217,6 +217,8 @@ public class AuthKit implements BurpExtension {
                 model.setPathFilterEnabled(panel.getCheckBoxPathFilter().isSelected()));
         panel.getCheckBoxStatusCodeFilter().addActionListener(e ->
                 model.setStatusCodeFilterEnabled(panel.getCheckBoxStatusCodeFilter().isSelected()));
+        panel.getCheckBoxExtensionFilter().addActionListener(e ->
+                model.setExtensionFilterEnabled(panel.getCheckBoxExtensionFilter().isSelected()));
 
         // 文本区域使用 FocusListener 在失焦时同步
         panel.getTextAreaDomain().addFocusListener(new java.awt.event.FocusAdapter() {
@@ -249,6 +251,12 @@ public class AuthKit implements BurpExtension {
                 model.setRawAuthHeaders(panel.getTextAreaAuthHeaders().getText());
             }
         });
+        panel.getTextFieldExtensionBlacklist().addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override
+            public void focusLost(java.awt.event.FocusEvent e) {
+                model.setRawExtensionBlacklist(panel.getTextFieldExtensionBlacklist().getText());
+            }
+        });
 
         // 初始同步默认值
         model.setEnabled(panel.getCheckBoxEnabled().isSelected());
@@ -256,9 +264,11 @@ public class AuthKit implements BurpExtension {
         model.setMethodFilterEnabled(panel.getCheckBoxMethodFilter().isSelected());
         model.setPathFilterEnabled(panel.getCheckBoxPathFilter().isSelected());
         model.setStatusCodeFilterEnabled(panel.getCheckBoxStatusCodeFilter().isSelected());
+        model.setExtensionFilterEnabled(panel.getCheckBoxExtensionFilter().isSelected());
         model.setRawFilterMethods(panel.getTextFieldMethod().getText());
         model.setRawFilterStatusCodes(panel.getTextFieldStatusCode().getText());
         model.setRawAuthHeaders(panel.getTextAreaAuthHeaders().getText());
+        model.setRawExtensionBlacklist(panel.getTextFieldExtensionBlacklist().getText());
     }
 
     /**

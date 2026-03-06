@@ -77,6 +77,9 @@ public class HttpRequestHandler implements HttpHandler {
         if (configModel.shouldFilterPath(request.path())) {
             return false;
         }
+        if (configModel.shouldFilterExtension(request.path())) {
+            return false;
+        }
         if (configModel.shouldFilterStatusCode(statusCode)) {
             return false;
         }

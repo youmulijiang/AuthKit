@@ -34,6 +34,10 @@ public class ConfigurationPanel extends JPanel {
     private final JCheckBox checkBoxStatusCodeFilter;
     private final JTextField textFieldStatusCode;
 
+    // ===== 后缀黑名单 =====
+    private final JCheckBox checkBoxExtensionFilter;
+    private final JTextField textFieldExtensionBlacklist;
+
     // ===== 认证头配置 =====
     private final JTextArea textAreaAuthHeaders;
 
@@ -49,6 +53,8 @@ public class ConfigurationPanel extends JPanel {
         this.textAreaPath = builder.textAreaPath;
         this.checkBoxStatusCodeFilter = builder.checkBoxStatusCodeFilter;
         this.textFieldStatusCode = builder.textFieldStatusCode;
+        this.checkBoxExtensionFilter = builder.checkBoxExtensionFilter;
+        this.textFieldExtensionBlacklist = builder.textFieldExtensionBlacklist;
         this.textAreaAuthHeaders = builder.textAreaAuthHeaders;
         initLayout();
     }
@@ -124,8 +130,16 @@ public class ConfigurationPanel extends JPanel {
         panelStatus.add(textFieldStatusCode, BorderLayout.CENTER);
         panelStatus.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
         panel.add(panelStatus);
+        panel.add(Box.createVerticalStrut(5));
 
-        panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 250));
+        // 后缀黑名单
+        JPanel panelExtension = new JPanel(new BorderLayout(5, 0));
+        panelExtension.add(checkBoxExtensionFilter, BorderLayout.WEST);
+        panelExtension.add(textFieldExtensionBlacklist, BorderLayout.CENTER);
+        panelExtension.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+        panel.add(panelExtension);
+
+        panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 290));
         return panel;
     }
 
@@ -201,6 +215,16 @@ public class ConfigurationPanel extends JPanel {
         return textFieldStatusCode;
     }
 
+    /** 获取后缀黑名单过滤开关 */
+    public JCheckBox getCheckBoxExtensionFilter() {
+        return checkBoxExtensionFilter;
+    }
+
+    /** 获取后缀黑名单输入框 */
+    public JTextField getTextFieldExtensionBlacklist() {
+        return textFieldExtensionBlacklist;
+    }
+
     /** 获取认证头配置文本区 */
     public JTextArea getTextAreaAuthHeaders() {
         return textAreaAuthHeaders;
@@ -222,6 +246,8 @@ public class ConfigurationPanel extends JPanel {
         private final JTextArea textAreaPath;
         private final JCheckBox checkBoxStatusCodeFilter;
         private final JTextField textFieldStatusCode;
+        private final JCheckBox checkBoxExtensionFilter;
+        private final JTextField textFieldExtensionBlacklist;
         private final JTextArea textAreaAuthHeaders;
 
         public Builder() {
@@ -247,6 +273,10 @@ public class ConfigurationPanel extends JPanel {
 
             this.checkBoxStatusCodeFilter = new JCheckBox("Status Code Filter", true);
             this.textFieldStatusCode = new JTextField("304, 204");
+
+            this.checkBoxExtensionFilter = new JCheckBox("Extension Blacklist", true);
+            this.textFieldExtensionBlacklist = new JTextField(model.ConfigModel.DEFAULT_EXTENSION_BLACKLIST);
+            this.textFieldExtensionBlacklist.setToolTipText("Comma-separated file extensions to exclude, e.g. css, js, png");
 
             this.textAreaAuthHeaders = new JTextArea("Cookie\nAuthorization\nToken");
             this.textAreaAuthHeaders.setFont(monoFont);
