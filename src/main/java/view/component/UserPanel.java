@@ -84,7 +84,10 @@ public class UserPanel extends JPanel {
      * @return 新创建的 AuthUserConfigPanel
      */
     public AuthUserConfigPanel addUser() {
-        userCounter++;
+        // 跳过已被占用的名称，避免与用户手动重命名后的名称冲突
+        do {
+            userCounter++;
+        } while (userPanels.containsKey("User" + userCounter));
         String name = "User" + userCounter;
         AuthUserConfigPanel configPanel = new AuthUserConfigPanel.Builder(name).build();
         userPanels.put(name, configPanel);
