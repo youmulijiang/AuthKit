@@ -5,6 +5,7 @@ import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;
 import core.DiffService;
 import core.HashService;
+import core.RankService;
 import core.RequestReplayService;
 import model.AuthUserModel;
 import model.CompareSampleModel;
@@ -12,7 +13,6 @@ import model.ConfigModel;
 import model.MessageDataModel;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,6 +32,9 @@ public class AuthController {
 
     /** 所有鉴权比较记录 */
     private final List<CompareSampleModel> samples;
+
+    /** samples 读写锁 */
+    private final Object samplesLock;
 
     /** 记录编号计数器 */
     private final AtomicInteger idCounter;
@@ -53,6 +56,7 @@ public class AuthController {
         this.replayService = replayService;
         this.diffService = diffService;
         this.samples = new ArrayList<>();
+        this.samplesLock = new Object();
         this.idCounter = new AtomicInteger(0);
         this.processedRequests = ConcurrentHashMap.newKeySet();
     }
@@ -86,7 +90,8 @@ public class AuthController {
         CompareSampleModel sample = new CompareSampleModel(
                 id, originalRequest.method(), originalRequest.url());
 
-        // 1. 记录原始请求数据
+        // 1. 记录原始请求数据，Original 固定 100 分
+        originalData.setRank(RankService.ORIGINAL_RANK);
         sample.putMessageData("Original", originalData);
 
         // 2. 重放未授权请求
@@ -94,6 +99,7 @@ public class AuthController {
         HttpRequestResponse unauthReqResp = replayService.replayUnauthorized(
                 originalRequest, authHeaders);
         MessageDataModel unauthData = replayService.buildMessageData(unauthReqResp);
+        unauthData.setRank(RankService.calculateRank(originalData, unauthData));
         sample.putMessageData("Unauthorized", unauthData);
 
         // 3. 为每个启用的用户重放请求
@@ -103,10 +109,13 @@ public class AuthController {
             }
             HttpRequestResponse userReqResp = replayService.replay(originalRequest, user);
             MessageDataModel userData = replayService.buildMessageData(userReqResp);
+            userData.setRank(RankService.calculateRank(originalData, userData));
             sample.putMessageData(user.getName(), userData);
         }
 
-        samples.add(sample);
+        synchronized (samplesLock) {
+            samples.add(sample);
+        }
         return sample;
     }
 
@@ -127,7 +136,9 @@ public class AuthController {
      * @return 不可修改的记录列表
      */
     public List<CompareSampleModel> getSamples() {
-        return Collections.unmodifiableList(samples);
+        synchronized (samplesLock) {
+            return List.copyOf(samples);
+        }
     }
 
     /**
@@ -137,10 +148,12 @@ public class AuthController {
      * @return 对应的 CompareSampleModel，索引越界返回 null
      */
     public CompareSampleModel getSample(int index) {
-        if (index < 0 || index >= samples.size()) {
-            return null;
+        synchronized (samplesLock) {
+            if (index < 0 || index >= samples.size()) {
+                return null;
+            }
+            return samples.get(index);
         }
-        return samples.get(index);
     }
 
     /** 获取插件配置模型 */
@@ -150,7 +163,9 @@ public class AuthController {
 
     /** 清空所有记录 */
     public void clearAll() {
-        samples.clear();
+        synchronized (samplesLock) {
+            samples.clear();
+        }
         idCounter.set(0);
         processedRequests.clear();
     }

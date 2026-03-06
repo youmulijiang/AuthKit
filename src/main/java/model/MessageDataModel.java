@@ -16,6 +16,13 @@ public class MessageDataModel {
     private int length;
     private int hash;
 
+    /** 响应 attributes 个数 */
+    private int attributeCount;
+    /** annotations notes 内容 */
+    private String note;
+    /** 鉴权风险评分 0~100 */
+    private int rank;
+
     /** Montoya 原始请求对象（供编辑器使用） */
     private HttpRequest httpRequest;
     /** Montoya 原始响应对象（供编辑器使用） */
@@ -91,6 +98,36 @@ public class MessageDataModel {
     /** 设置响应体哈希值 */
     public void setHash(int hash) {
         this.hash = hash;
+    }
+
+    /** 获取响应 attributes 个数 */
+    public int getAttributeCount() {
+        return attributeCount;
+    }
+
+    /** 设置响应 attributes 个数 */
+    public void setAttributeCount(int attributeCount) {
+        this.attributeCount = attributeCount;
+    }
+
+    /** 获取 annotations notes */
+    public String getNote() {
+        return note;
+    }
+
+    /** 设置 annotations notes */
+    public void setNote(String note) {
+        this.note = note;
+    }
+
+    /** 获取鉴权风险评分 */
+    public int getRank() {
+        return rank;
+    }
+
+    /** 设置鉴权风险评分 */
+    public void setRank(int rank) {
+        this.rank = rank;
     }
 
     /** 获取 Montoya 原始请求对象 */

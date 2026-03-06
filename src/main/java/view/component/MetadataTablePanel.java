@@ -15,7 +15,7 @@ import java.util.List;
 public class MetadataTablePanel extends JPanel {
 
     private static final String[] COLUMN_NAMES = {
-            "鉴权对象", "状态码", "包长度", "Hash", "参数个数"
+            "Auth Object", "Status Code", "Length", "Hash", "AttributeNum", "Note", "Rank"
     };
 
     /** 默认鉴权对象行 */
@@ -87,20 +87,23 @@ public class MetadataTablePanel extends JPanel {
     private void rebuildRows() {
         tableModel.setRowCount(0);
         for (String name : authRows) {
-            tableModel.addRow(new Object[]{name, "", "", "", ""});
+            tableModel.addRow(new Object[]{name, "", "", "", "", "", ""});
         }
     }
 
     /**
      * 更新指定鉴权对象行的元数据
      *
-     * @param name       鉴权对象名称
-     * @param statusCode 状态码
-     * @param length     包长度
-     * @param hash       哈希值
-     * @param paramCount 参数个数
+     * @param name           鉴权对象名称
+     * @param statusCode     状态码
+     * @param length         包长度
+     * @param hash           哈希值
+     * @param attributeCount 响应 attributes 个数
+     * @param note           annotations notes 内容
+     * @param rank           鉴权风险评分 0~100
      */
-    public void updateRow(String name, int statusCode, int length, int hash, int paramCount) {
+    public void updateRow(String name, int statusCode, int length, int hash,
+                          int attributeCount, String note, int rank) {
         int rowIndex = authRows.indexOf(name);
         if (rowIndex < 0) {
             return;
@@ -108,7 +111,9 @@ public class MetadataTablePanel extends JPanel {
         tableModel.setValueAt(statusCode, rowIndex, 1);
         tableModel.setValueAt(length, rowIndex, 2);
         tableModel.setValueAt(hash, rowIndex, 3);
-        tableModel.setValueAt(paramCount, rowIndex, 4);
+        tableModel.setValueAt(attributeCount, rowIndex, 4);
+        tableModel.setValueAt(note != null ? note : "", rowIndex, 5);
+        tableModel.setValueAt(rank, rowIndex, 6);
     }
 
     /** 获取元数据表格 */

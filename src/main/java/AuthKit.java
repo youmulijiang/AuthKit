@@ -20,9 +20,11 @@ import view.MainPanel;
 import view.component.*;
 
 import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -74,22 +76,8 @@ public class AuthKit implements BurpExtension {
         });
 
         // 绑定展示指标下拉框切换 → 刷新 DataTable 中鉴权对象列的数据
-        mainPanel.getPanelConfiguration().getComboBoxDisplayMetric().addActionListener(e -> {
-            String metric = mainPanel.getPanelConfiguration().getSelectedDisplayMetric();
-            DataTablePanel dataTable = mainPanel.getPanelDataTable();
-            List<String> authColumns = dataTable.getAuthColumns();
-            int rowCount = dataTable.getTableModel().getRowCount();
-            for (int row = 0; row < rowCount; row++) {
-                CompareSampleModel sample = controller.getSample(row);
-                if (sample != null) {
-                    for (int col = 0; col < authColumns.size(); col++) {
-                        dataTable.getTableModel().setValueAt(
-                                sample.getValueByAuthName(authColumns.get(col), metric),
-                                row, 3 + col);
-                    }
-                }
-            }
-        });
+        mainPanel.getPanelConfiguration().getComboBoxDisplayMetric().addActionListener(
+                e -> refreshDataTable(mainPanel, controller));
 
         // 绑定筛选功能
         bindFilter(mainPanel, controller);
@@ -128,7 +116,7 @@ public class AuthKit implements BurpExtension {
                             request, response, originalData, users);
 
                     // 更新 UI（在 EDT 线程）
-                    SwingUtilities.invokeLater(() -> updateUI(mainPanel, sample));
+                    SwingUtilities.invokeLater(() -> refreshDataTable(mainPanel, controller));
                 } catch (Exception ex) {
                     LogUtils.INSTANCE.error("Error processing request", ex);
                 }
@@ -316,14 +304,31 @@ public class AuthKit implements BurpExtension {
     }
 
     /**
-     * 更新 UI：添加新行到 DataTable
+     * 刷新 DataTable：始终以当前 samples 快照和当前选中 metric 为准
      */
-    private void updateUI(MainPanel mainPanel, CompareSampleModel sample) {
+    private void refreshDataTable(MainPanel mainPanel, AuthController controller) {
         DataTablePanel dataTable = mainPanel.getPanelDataTable();
+        DefaultTableModel tableModel = dataTable.getTableModel();
         List<String> authColumns = dataTable.getAuthColumns();
         String metric = mainPanel.getPanelConfiguration().getSelectedDisplayMetric();
+        List<CompareSampleModel> samples = controller.getSamples();
 
-        // 构建行数据: # / Method / URL / 各鉴权对象的指标值
+        tableModel.setRowCount(samples.size());
+        for (int row = 0; row < samples.size(); row++) {
+            Object[] rowData = buildDataTableRow(samples.get(row), authColumns, metric);
+            for (int col = 0; col < rowData.length; col++) {
+                if (!Objects.equals(tableModel.getValueAt(row, col), rowData[col])) {
+                    tableModel.setValueAt(rowData[col], row, col);
+                }
+            }
+        }
+    }
+
+    /**
+     * 构建 DataTable 单行数据
+     */
+    private Object[] buildDataTableRow(CompareSampleModel sample, List<String> authColumns,
+                                       String metric) {
         int totalColumns = 3 + authColumns.size();
         Object[] row = new Object[totalColumns];
         row[0] = sample.getId();
@@ -332,7 +337,7 @@ public class AuthKit implements BurpExtension {
         for (int i = 0; i < authColumns.size(); i++) {
             row[3 + i] = sample.getValueByAuthName(authColumns.get(i), metric);
         }
-        dataTable.addRow(row);
+        return row;
     }
 
     /**
@@ -343,7 +348,9 @@ public class AuthKit implements BurpExtension {
             MessageDataModel data = sample.getMessageData(authName);
             if (data != null) {
                 metadataTable.updateRow(authName, data.getStatusCode(),
-                        data.getLength(), data.getHash(), 0);
+                        data.getLength(), data.getHash(),
+                        data.getAttributeCount(), data.getNote(),
+                        data.getRank());
             }
         }
     }
@@ -536,6 +543,6 @@ public class AuthKit implements BurpExtension {
                 request, finalResponse, originalData, users);
 
         // 更新 UI
-        SwingUtilities.invokeLater(() -> updateUI(mainPanel, sample));
+        SwingUtilities.invokeLater(() -> refreshDataTable(mainPanel, controller));
     }
 }

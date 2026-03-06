@@ -15,7 +15,7 @@ import java.awt.*;
 public class ConfigurationPanel extends JPanel {
 
     /** DataTable 鉴权列可展示的指标选项 */
-    public static final String[] DISPLAY_METRICS = {"Length", "Status Code", "Hash"};
+    public static final String[] DISPLAY_METRICS = {"Length", "Status Code", "Hash", "AttributeNum", "Rank"};
 
     /** 禁用时文本框的背景色 */
     private static final Color DISABLED_BG = new Color(230, 230, 230);
@@ -100,7 +100,7 @@ public class ConfigurationPanel extends JPanel {
         checkBoxPathFilter.setEnabled(editable);
         checkBoxStatusCodeFilter.setEnabled(editable);
         checkBoxExtensionFilter.setEnabled(editable);
-        comboBoxDisplayMetric.setEnabled(editable);
+        // comboBoxDisplayMetric 始终可用，启用插件时也可切换对比指标
     }
 
     /** 初始化布局 */

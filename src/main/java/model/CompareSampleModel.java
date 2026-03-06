@@ -123,6 +123,8 @@ public class CompareSampleModel {
         return switch (metric) {
             case "Status Code" -> data.getStatusCode();
             case "Hash" -> data.getHash();
+            case "AttributeNum" -> data.getAttributeCount();
+            case "Rank" -> data.getRank();
             default -> data.getLength();
         };
     }

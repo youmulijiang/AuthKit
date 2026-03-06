@@ -149,6 +149,29 @@ class AuthControllerTest {
     }
 
     @Test
+    @DisplayName("getSamples 应返回快照，后续 clearAll 不应影响已获取结果")
+    void getSamples_shouldReturnSnapshot() {
+        HttpRequest request = mock(HttpRequest.class);
+        HttpResponse response = mock(HttpResponse.class);
+        when(request.method()).thenReturn("GET");
+        when(request.url()).thenReturn("http://example.com/snapshot");
+
+        HttpRequestResponse unauthReqResp = mock(HttpRequestResponse.class);
+        when(replayService.replayUnauthorized(eq(request), anyList())).thenReturn(unauthReqResp);
+        when(replayService.buildMessageData(unauthReqResp))
+                .thenReturn(new MessageDataModel("r", "r", 200, 10, 4001));
+
+        MessageDataModel originalData = new MessageDataModel("req", "resp", 200, 100, 4002);
+        controller.processRequest(request, response, originalData, List.of());
+
+        List<CompareSampleModel> snapshot = controller.getSamples();
+        controller.clearAll();
+
+        assertEquals(1, snapshot.size());
+        assertTrue(controller.getSamples().isEmpty());
+    }
+
+    @Test
     @DisplayName("isNewRequest 应对相同 method+url 去重")
     void isNewRequest_shouldDeduplicateSameMethodUrl() {
         assertTrue(controller.isNewRequest("GET", "http://example.com/api"));

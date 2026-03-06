@@ -84,8 +84,18 @@ public class RequestReplayService {
         int statusCode = response.statusCode();
         int length = response.bodyToString().length();
         int hash = HashService.hash(response.bodyToString());
+        int attributeCount = response.attributes().size();
 
-        return new MessageDataModel(requestStr, responseStr, statusCode, length, hash, request, response);
+        // 从 HttpRequestResponse 获取 annotations notes
+        String note = "";
+        if (requestResponse.annotations() != null && requestResponse.annotations().hasNotes()) {
+            note = requestResponse.annotations().notes();
+        }
+
+        MessageDataModel model = new MessageDataModel(requestStr, responseStr, statusCode, length, hash, request, response);
+        model.setAttributeCount(attributeCount);
+        model.setNote(note);
+        return model;
     }
 }
 
