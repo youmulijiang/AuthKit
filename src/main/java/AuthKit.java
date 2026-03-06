@@ -15,6 +15,7 @@ import model.ConfigModel;
 import model.MessageDataModel;
 import utils.ApiUtils;
 import utils.LogUtils;
+import view.AuthContextMenuProvider;
 import view.MainPanel;
 import view.component.*;
 
@@ -24,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
 
 public class AuthKit implements BurpExtension {
 
@@ -97,6 +99,9 @@ public class AuthKit implements BurpExtension {
 
         // 绑定 Diff 按钮事件
         bindDiffButton(mainPanel.getPanelCompare(), diffService);
+
+        // 注册右键菜单
+        registerContextMenu(montoyaApi, mainPanel, controller, configModel, replayService);
 
         // 创建并注册 HttpRequestHandler
         HttpRequestHandler httpHandler = new HttpRequestHandler(configModel, (request, response) -> {
@@ -419,5 +424,114 @@ public class AuthKit implements BurpExtension {
 
             comparePanel.setDiffContent(html.toString());
         });
+    }
+
+    /**
+     * 注册右键菜单，支持用户在 Proxy/Repeater 等模块中右键发送请求到 AuthKit 进行主动鉴权测试
+     */
+    private void registerContextMenu(MontoyaApi montoyaApi, MainPanel mainPanel,
+                                      AuthController controller, ConfigModel configModel,
+                                      RequestReplayService replayService) {
+        // 用户名称提供者：从 UserPanel 获取当前已配置的用户名称
+        java.util.function.Supplier<List<String>> userNamesSupplier = () ->
+                new ArrayList<>(mainPanel.getPanelUser().getUserPanels().keySet());
+
+        // Send 处理回调：主动发包，由插件内部处理所有鉴权用户
+        java.util.function.Consumer<List<burp.api.montoya.http.message.HttpRequestResponse>>
+                sendHandler = (selectedItems) -> {
+            for (burp.api.montoya.http.message.HttpRequestResponse reqResp : selectedItems) {
+                if (reqResp.request() == null) {
+                    continue;
+                }
+                executor.submit(() -> {
+                    try {
+                        processContextMenuRequest(reqResp,
+                                mainPanel, controller, replayService);
+                    } catch (Exception ex) {
+                        LogUtils.INSTANCE.error("Error processing context menu request", ex);
+                    }
+                });
+            }
+        };
+
+        // Extract 处理回调：将提取到的认证头文本填入指定用户的配置
+        java.util.function.BiConsumer<String, String> extractHandler = (authText, userName) -> {
+            SwingUtilities.invokeLater(() -> {
+                UserPanel userPanel = mainPanel.getPanelUser();
+                AuthUserConfigPanel configPanel = userPanel.getUserPanel(userName);
+                if (configPanel != null) {
+                    configPanel.getTextAreaAuthHeaders().setText(authText);
+                    LogUtils.INSTANCE.info("Extracted auth headers to user: " + userName);
+                }
+            });
+        };
+
+        // 新建用户回调：通过 UserPanel 添加用户并返回名称
+        java.util.function.Supplier<String> createUserHandler = () -> {
+            // 需要在 EDT 线程中执行 UI 操作，但 Supplier 需要同步返回结果
+            // 使用 invokeAndWait 确保在 EDT 中创建用户
+            final String[] newName = {null};
+            try {
+                if (SwingUtilities.isEventDispatchThread()) {
+                    AuthUserConfigPanel panel = mainPanel.getPanelUser().addUser();
+                    newName[0] = panel.getUserName();
+                } else {
+                    SwingUtilities.invokeAndWait(() -> {
+                        AuthUserConfigPanel panel = mainPanel.getPanelUser().addUser();
+                        newName[0] = panel.getUserName();
+                    });
+                }
+            } catch (Exception ex) {
+                LogUtils.INSTANCE.error("Error creating new user", ex);
+            }
+            return newName[0];
+        };
+
+        AuthContextMenuProvider contextMenuProvider =
+                new AuthContextMenuProvider(userNamesSupplier, sendHandler,
+                        extractHandler, createUserHandler);
+        montoyaApi.userInterface().registerContextMenuItemsProvider(contextMenuProvider);
+    }
+
+    /**
+     * 处理右键菜单发送的请求：构建原始数据、收集所有鉴权用户重放请求、更新 UI
+     */
+    private void processContextMenuRequest(
+            burp.api.montoya.http.message.HttpRequestResponse reqResp,
+            MainPanel mainPanel, AuthController controller,
+            RequestReplayService replayService) {
+
+        burp.api.montoya.http.message.requests.HttpRequest request = reqResp.request();
+        burp.api.montoya.http.message.responses.HttpResponse response = reqResp.response();
+
+        // 如果没有响应，先发送请求获取响应
+        if (response == null) {
+            response = replayService.sendRaw(request);
+        }
+
+        // 去重检查
+        if (!controller.isNewRequest(request.method(), request.url())) {
+            return;
+        }
+
+        // 构建原始报文数据
+        MessageDataModel originalData = new MessageDataModel(
+                request.toString(), response.toString(),
+                response.statusCode(),
+                response.bodyToString().length(),
+                core.HashService.hash(response.bodyToString()),
+                request, response
+        );
+
+        // 收集所有鉴权用户
+        List<AuthUserModel> users = collectUsers(mainPanel.getPanelUser());
+
+        // 处理请求
+        final burp.api.montoya.http.message.responses.HttpResponse finalResponse = response;
+        CompareSampleModel sample = controller.processRequest(
+                request, finalResponse, originalData, users);
+
+        // 更新 UI
+        SwingUtilities.invokeLater(() -> updateUI(mainPanel, sample));
     }
 }

@@ -59,6 +59,17 @@ public class RequestReplayService {
     }
 
     /**
+     * 直接发送原始请求（不做任何处理），返回响应
+     *
+     * @param request 原始请求
+     * @return HTTP 响应
+     */
+    public HttpResponse sendRaw(HttpRequest request) {
+        HttpRequestResponse reqResp = http.sendRequest(request);
+        return reqResp.response();
+    }
+
+    /**
      * 从请求响应对中构建 MessageDataModel
      *
      * @param requestResponse 请求响应对
