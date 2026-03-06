@@ -89,6 +89,9 @@ public class AuthKit implements BurpExtension {
             }
         });
 
+        // 绑定筛选功能
+        bindFilter(mainPanel, controller);
+
         // 绑定 DataTable 行选中事件 → 更新 MetadataTable + ComparePanel
         bindTableSelection(mainPanel, controller);
 
@@ -107,7 +110,7 @@ public class AuthKit implements BurpExtension {
                     MessageDataModel originalData = new MessageDataModel(
                             request.toString(), response.toString(),
                             response.statusCode(),
-                            response.toByteArray().length(),
+                            response.bodyToString().length(),
                             core.HashService.hash(response.bodyToString()),
                             request, response
                     );
@@ -135,6 +138,69 @@ public class AuthKit implements BurpExtension {
         });
 
         LogUtils.INSTANCE.info("AuthKit 插件加载成功");
+    }
+
+    /**
+     * 绑定筛选功能：下拉框切换和输入框实时输入触发筛选
+     */
+    private void bindFilter(MainPanel mainPanel, AuthController controller) {
+        ToolbarPanel toolbar = mainPanel.getPanelToolbar();
+        DataTablePanel dataTable = mainPanel.getPanelDataTable();
+
+        // 设置数据提供器：根据筛选类型返回对应的可搜索文本
+        dataTable.setDataProvider(modelRow -> {
+            CompareSampleModel sample = controller.getSample(modelRow);
+            if (sample == null) {
+                return "";
+            }
+            String filterType = toolbar.getSelectedFilterType();
+            StringBuilder sb = new StringBuilder();
+            for (String authName : sample.getAuthNames()) {
+                MessageDataModel data = sample.getMessageData(authName);
+                if (data == null) continue;
+                switch (filterType) {
+                    case "Request Content":
+                        if (data.getRequest() != null) sb.append(data.getRequest()).append(" ");
+                        break;
+                    case "Response Content":
+                        if (data.getResponse() != null) sb.append(data.getResponse()).append(" ");
+                        break;
+                    default:
+                        // All: 拼接所有内容
+                        if (data.getRequest() != null) sb.append(data.getRequest()).append(" ");
+                        if (data.getResponse() != null) sb.append(data.getResponse()).append(" ");
+                        break;
+                }
+            }
+            return sb.toString();
+        });
+
+        // 触发筛选的公共方法
+        Runnable doFilter = () -> {
+            String keyword = toolbar.getFilterText();
+            String filterType = toolbar.getSelectedFilterType();
+            dataTable.applyFilter(filterType, keyword);
+        };
+
+        // 输入框实时筛选（DocumentListener）
+        toolbar.getTextFieldFilter().getDocument().addDocumentListener(
+                new javax.swing.event.DocumentListener() {
+                    @Override
+                    public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                        if (!toolbar.isShowingPlaceholder()) doFilter.run();
+                    }
+                    @Override
+                    public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                        if (!toolbar.isShowingPlaceholder()) doFilter.run();
+                    }
+                    @Override
+                    public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                        if (!toolbar.isShowingPlaceholder()) doFilter.run();
+                    }
+                });
+
+        // 下拉框切换时重新筛选
+        toolbar.getComboBoxFilterType().addActionListener(e -> doFilter.run());
     }
 
     /**

@@ -34,7 +34,7 @@ public class MainPanel extends JPanel {
      */
     public MainPanel(MontoyaApi api) {
         this.panelToolbar = new ToolbarPanel.Builder()
-                .filterPlaceholder("输入 URL 关键字筛选")
+                .filterPlaceholder("Enter keyword to filter...")
                 .build();
         this.panelDataTable = new DataTablePanel.Builder().build();
         this.panelMetadataTable = new MetadataTablePanel.Builder().build();
