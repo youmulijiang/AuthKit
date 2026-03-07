@@ -7,6 +7,7 @@ import burp.api.montoya.ui.editor.HttpRequestEditor;
 import burp.api.montoya.ui.editor.HttpResponseEditor;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import utils.I18n;
 
 import javax.swing.*;
 import java.awt.*;
@@ -27,7 +28,7 @@ class ComparePanelTest {
             JSplitPane splitMain = (JSplitPane) comparePanel.getComponent(0);
             JPanel topPanel = (JPanel) splitMain.getTopComponent();
 
-            assertEquals("Target", findLabelText(topPanel));
+            assertEquals(I18n.getInstance().text("compare", "label.target"), findLabelText(topPanel));
         });
     }
 
@@ -65,6 +66,39 @@ class ComparePanelTest {
         });
     }
 
+    @Test
+    @DisplayName("切换语言后应刷新显示标题，但保持逻辑鉴权对象名称不变")
+    void languageSwitch_shouldRefreshDisplayTitlesButKeepLogicalAuthNames() throws Exception {
+        I18n i18n = I18n.getInstance();
+        I18n.Language originalLanguage = i18n.getCurrentLanguage();
+        try {
+            setLanguage(I18n.Language.ENGLISH);
+            ComparePanel comparePanel = createComparePanel();
+
+            SwingUtilities.invokeAndWait(() -> {
+                assertEquals("Target", findLabelText((Container) ((JSplitPane) comparePanel.getComponent(0)).getTopComponent()));
+                assertEquals(i18n.translateAuthObjectName("Original"), comparePanel.getTabbedSource().getTitleAt(0));
+                assertEquals("Original", comparePanel.getSelectedSourceName());
+            });
+
+            setLanguage(I18n.Language.CHINESE);
+
+            SwingUtilities.invokeAndWait(() -> {
+                JSplitPane splitMain = (JSplitPane) comparePanel.getComponent(0);
+                JPanel topPanel = (JPanel) splitMain.getTopComponent();
+
+                assertEquals(i18n.text("compare", "label.target"), findLabelText(topPanel));
+                assertEquals(i18n.translateAuthObjectName("Original"), comparePanel.getTabbedSource().getTitleAt(0));
+                assertEquals(i18n.translateAuthObjectName("Unauthorized"), comparePanel.getTabbedTarget().getTitleAt(1));
+                assertEquals("Original", comparePanel.getSelectedSourceName());
+                assertTrue(comparePanel.selectTargetTab("Unauthorized"));
+                assertEquals("Unauthorized", comparePanel.getSelectedTargetName());
+            });
+        } finally {
+            setLanguage(originalLanguage);
+        }
+    }
+
     private ComparePanel createComparePanel() {
         MontoyaApi api = mock(MontoyaApi.class);
         UserInterface userInterface = mock(UserInterface.class);
@@ -86,6 +120,10 @@ class ComparePanelTest {
         HttpResponseEditor editor = mock(HttpResponseEditor.class);
         when(editor.uiComponent()).thenReturn(new JPanel());
         return editor;
+    }
+
+    private void setLanguage(I18n.Language language) throws Exception {
+        SwingUtilities.invokeAndWait(() -> I18n.getInstance().setLanguage(language));
     }
 
     private String findLabelText(Container container) {

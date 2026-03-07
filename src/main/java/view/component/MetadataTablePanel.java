@@ -1,10 +1,13 @@
 package view.component;
 
+import utils.I18n;
+
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Vector;
 
 /**
  * 元数据透视表面板
@@ -13,10 +16,6 @@ import java.util.List;
  * 列: 鉴权对象 / 状态码 / 包长度 / Hash / 参数个数
  */
 public class MetadataTablePanel extends JPanel {
-
-    private static final String[] COLUMN_NAMES = {
-            "Auth Object", "Status Code", "Length", "Hash", "AttributeNum", "Note", "Rank"
-    };
 
     /** 默认鉴权对象行 */
     private static final String[] DEFAULT_AUTH_ROWS = {"Original", "Unauthorized"};
@@ -32,7 +31,8 @@ public class MetadataTablePanel extends JPanel {
         this.tableMetadata = builder.tableMetadata;
         this.authRows = builder.authRows;
         initLayout();
-        rebuildRows();
+        I18n.getInstance().addLanguageChangeListener(this::refreshTexts);
+        refreshTexts();
     }
 
     /** 初始化布局 */
@@ -80,15 +80,38 @@ public class MetadataTablePanel extends JPanel {
         }
         authRows.set(index, newName);
         // 更新表格中第一列的显示名称
-        tableModel.setValueAt(newName, index, 0);
+        tableModel.setValueAt(I18n.getInstance().translateAuthObjectName(newName), index, 0);
     }
 
     /** 重建透视表行（每个鉴权对象一行，数据清空） */
     private void rebuildRows() {
         tableModel.setRowCount(0);
         for (String name : authRows) {
-            tableModel.addRow(new Object[]{name, "", "", "", "", "", ""});
+            tableModel.addRow(new Object[]{I18n.getInstance().translateAuthObjectName(name), "", "", "", "", "", ""});
         }
+    }
+
+    private void refreshTexts() {
+        tableModel.setColumnIdentifiers(buildColumnNames());
+        if (tableModel.getRowCount() != authRows.size()) {
+            rebuildRows();
+            return;
+        }
+        for (int i = 0; i < authRows.size(); i++) {
+            tableModel.setValueAt(I18n.getInstance().translateAuthObjectName(authRows.get(i)), i, 0);
+        }
+    }
+
+    private Vector<String> buildColumnNames() {
+        Vector<String> columns = new Vector<>();
+        columns.add(I18n.getInstance().text("metadata_table", "column.authObject"));
+        columns.add(I18n.getInstance().text("metadata_table", "column.statusCode"));
+        columns.add(I18n.getInstance().text("metadata_table", "column.length"));
+        columns.add(I18n.getInstance().text("metadata_table", "column.hash"));
+        columns.add(I18n.getInstance().text("metadata_table", "column.attributeNum"));
+        columns.add(I18n.getInstance().text("metadata_table", "column.note"));
+        columns.add(I18n.getInstance().text("metadata_table", "column.rank"));
+        return columns;
     }
 
     /**
@@ -150,7 +173,7 @@ public class MetadataTablePanel extends JPanel {
             for (String row : DEFAULT_AUTH_ROWS) {
                 authRows.add(row);
             }
-            this.tableModel = new DefaultTableModel(COLUMN_NAMES, 0) {
+            this.tableModel = new DefaultTableModel(new Vector<>(), 0) {
                 @Override
                 public boolean isCellEditable(int row, int column) {
                     return false;

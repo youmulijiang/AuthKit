@@ -1,5 +1,7 @@
 package view.component;
 
+import utils.I18n;
+
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.FocusAdapter;
@@ -125,8 +127,8 @@ public class UserPanel extends JPanel {
         // 新名称已存在，弹窗提示并恢复旧名称
         if (userPanels.containsKey(newName)) {
             JOptionPane.showMessageDialog(this,
-                    "The name \"" + newName + "\" is already in use. Please choose a different name.",
-                    "Duplicate Name",
+                    I18n.getInstance().format("user", "dialog.duplicateName.message", newName),
+                    I18n.getInstance().text("user", "dialog.duplicateName.title"),
                     JOptionPane.WARNING_MESSAGE);
             configPanel.getTextFieldName().setText(oldName);
             configPanel.getTextFieldName().requestFocusInWindow();

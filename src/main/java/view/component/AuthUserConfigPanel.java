@@ -1,5 +1,7 @@
 package view.component;
 
+import utils.I18n;
+
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
 import java.awt.*;
@@ -18,12 +20,21 @@ public class AuthUserConfigPanel extends JPanel {
     private final JTextArea textAreaAuthHeaders;
     private final JTextArea textAreaParamReplacement;
 
+    private TitledBorder borderBasic;
+    private TitledBorder borderAuthHeaders;
+    private TitledBorder borderParamReplacement;
+    private JLabel labelName;
+    private JLabel labelAuthHint;
+    private JLabel labelParamHint;
+
     private AuthUserConfigPanel(Builder builder) {
         this.checkBoxEnabled = builder.checkBoxEnabled;
         this.textFieldName = builder.textFieldName;
         this.textAreaAuthHeaders = builder.textAreaAuthHeaders;
         this.textAreaParamReplacement = builder.textAreaParamReplacement;
         initLayout();
+        I18n.getInstance().addLanguageChangeListener(this::refreshTexts);
+        refreshTexts();
     }
 
     /** 初始化布局 */
@@ -47,9 +58,11 @@ public class AuthUserConfigPanel extends JPanel {
     /** 构建基础信息区（启用开关 + 角色名称） */
     private JPanel buildBasicSection() {
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
-        panel.setBorder(new TitledBorder("Basic"));
+        borderBasic = new TitledBorder("");
+        panel.setBorder(borderBasic);
+        labelName = new JLabel();
         panel.add(checkBoxEnabled);
-        panel.add(new JLabel("Name:"));
+        panel.add(labelName);
         panel.add(textFieldName);
         panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 65));
         return panel;
@@ -58,10 +71,11 @@ public class AuthUserConfigPanel extends JPanel {
     /** 构建认证头配置区 */
     private JPanel buildAuthHeaderSection() {
         JPanel panel = new JPanel(new BorderLayout(5, 5));
-        panel.setBorder(new TitledBorder("Auth Headers (will replace original headers)"));
-        JLabel labelHint = new JLabel("  Format: HeaderName: HeaderValue (one per line)");
-        labelHint.setFont(labelHint.getFont().deriveFont(Font.ITALIC, 11f));
-        panel.add(labelHint, BorderLayout.NORTH);
+        borderAuthHeaders = new TitledBorder("");
+        panel.setBorder(borderAuthHeaders);
+        labelAuthHint = new JLabel();
+        labelAuthHint.setFont(labelAuthHint.getFont().deriveFont(Font.ITALIC, 11f));
+        panel.add(labelAuthHint, BorderLayout.NORTH);
         panel.add(new JScrollPane(textAreaAuthHeaders), BorderLayout.CENTER);
         panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 250));
         panel.setPreferredSize(new Dimension(0, 200));
@@ -71,14 +85,30 @@ public class AuthUserConfigPanel extends JPanel {
     /** 构建参数替换规则区 */
     private JPanel buildParamReplacementSection() {
         JPanel panel = new JPanel(new BorderLayout(5, 5));
-        panel.setBorder(new TitledBorder("Param Replacement"));
-        JLabel labelHint = new JLabel("  Format: paramName=newValue (one per line)");
-        labelHint.setFont(labelHint.getFont().deriveFont(Font.ITALIC, 11f));
-        panel.add(labelHint, BorderLayout.NORTH);
+        borderParamReplacement = new TitledBorder("");
+        panel.setBorder(borderParamReplacement);
+        labelParamHint = new JLabel();
+        labelParamHint.setFont(labelParamHint.getFont().deriveFont(Font.ITALIC, 11f));
+        panel.add(labelParamHint, BorderLayout.NORTH);
         panel.add(new JScrollPane(textAreaParamReplacement), BorderLayout.CENTER);
         panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 200));
         panel.setPreferredSize(new Dimension(0, 150));
         return panel;
+    }
+
+    private void refreshTexts() {
+        I18n i18n = I18n.getInstance();
+        borderBasic.setTitle(i18n.text("user", "section.basic"));
+        borderAuthHeaders.setTitle(i18n.text("user", "section.authHeaders"));
+        borderParamReplacement.setTitle(i18n.text("user", "section.paramReplacement"));
+        checkBoxEnabled.setText(i18n.text("user", "checkbox.enabled"));
+        labelName.setText(i18n.text("user", "label.name"));
+        labelAuthHint.setText("  " + i18n.text("user", "hint.authHeaders"));
+        labelParamHint.setText("  " + i18n.text("user", "hint.paramReplacement"));
+        textAreaAuthHeaders.setToolTipText(i18n.text("user", "tooltip.authHeaders"));
+        textAreaParamReplacement.setToolTipText(i18n.text("user", "tooltip.paramReplacement"));
+        revalidate();
+        repaint();
     }
 
     // ===== Getter 方法 =====
@@ -124,14 +154,12 @@ public class AuthUserConfigPanel extends JPanel {
         private final JTextArea textAreaParamReplacement;
 
         public Builder(String defaultName) {
-            this.checkBoxEnabled = new JCheckBox("Enabled", true);
+            this.checkBoxEnabled = new JCheckBox("", true);
             this.textFieldName = new JTextField(defaultName, 15);
             this.textAreaAuthHeaders = new JTextArea();
             this.textAreaAuthHeaders.setFont(MONO_FONT);
-            this.textAreaAuthHeaders.setToolTipText("e.g. Cookie: JSESSIONID=abc");
             this.textAreaParamReplacement = new JTextArea();
             this.textAreaParamReplacement.setFont(MONO_FONT);
-            this.textAreaParamReplacement.setToolTipText("e.g. userId=testuser");
         }
 
         /** 构建鉴权对象配置面板 */

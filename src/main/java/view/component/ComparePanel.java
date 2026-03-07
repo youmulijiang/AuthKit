@@ -1,6 +1,7 @@
 package view.component;
 
 import burp.api.montoya.MontoyaApi;
+import utils.I18n;
 
 import javax.swing.*;
 import java.awt.*;
@@ -27,6 +28,9 @@ public class ComparePanel extends JPanel {
     private final JEditorPane editorPaneDiff;
     /** Diff 按钮 */
     private final JButton btnDiff;
+    private final JLabel labelTarget;
+    private final JLabel labelSource;
+    private final JLabel labelDiff;
 
     /** 选择区中每个鉴权对象名称 -> MessagePanel 的映射 */
     private final Map<String, MessagePanel> sourcePanels;
@@ -45,10 +49,15 @@ public class ComparePanel extends JPanel {
         this.tabbedTarget = builder.tabbedTarget;
         this.editorPaneDiff = builder.editorPaneDiff;
         this.btnDiff = builder.btnDiff;
+        this.labelTarget = builder.labelTarget;
+        this.labelSource = builder.labelSource;
+        this.labelDiff = builder.labelDiff;
         this.sourcePanels = builder.sourcePanels;
         this.targetPanels = builder.targetPanels;
         initLayout();
         initTabSync();
+        I18n.getInstance().addLanguageChangeListener(this::refreshTexts);
+        refreshTexts();
     }
 
     /** 初始化垂直三分布局 */
@@ -57,17 +66,17 @@ public class ComparePanel extends JPanel {
 
         // 区域1: 被选择区
         JPanel panelTarget = new JPanel(new BorderLayout());
-        panelTarget.add(new JLabel("  Target"), BorderLayout.NORTH);
+        panelTarget.add(labelTarget, BorderLayout.NORTH);
         panelTarget.add(tabbedTarget, BorderLayout.CENTER);
 
         // 区域2: 选择区
         JPanel panelSource = new JPanel(new BorderLayout());
-        panelSource.add(new JLabel("  Source"), BorderLayout.NORTH);
+        panelSource.add(labelSource, BorderLayout.NORTH);
         panelSource.add(tabbedSource, BorderLayout.CENTER);
 
         // 区域3: Diff 展示区（含 Diff 按钮）
         JPanel panelDiffHeader = new JPanel(new BorderLayout());
-        panelDiffHeader.add(new JLabel("  Diff"), BorderLayout.WEST);
+        panelDiffHeader.add(labelDiff, BorderLayout.WEST);
         panelDiffHeader.add(btnDiff, BorderLayout.EAST);
 
         JPanel panelDiff = new JPanel(new BorderLayout());
@@ -126,30 +135,22 @@ public class ComparePanel extends JPanel {
 
     /** 获取 Source 当前选中的 MessagePanel */
     public MessagePanel getSelectedSourcePanel() {
-        int idx = tabbedSource.getSelectedIndex();
-        if (idx < 0) return null;
-        String name = tabbedSource.getTitleAt(idx);
-        return sourcePanels.get(name);
+        return findMessagePanelByComponent(sourcePanels, tabbedSource.getSelectedComponent());
     }
 
     /** 获取 Target 当前选中的 MessagePanel */
     public MessagePanel getSelectedTargetPanel() {
-        int idx = tabbedTarget.getSelectedIndex();
-        if (idx < 0) return null;
-        String name = tabbedTarget.getTitleAt(idx);
-        return targetPanels.get(name);
+        return findMessagePanelByComponent(targetPanels, tabbedTarget.getSelectedComponent());
     }
 
     /** 获取 Source 当前选中的鉴权对象名称 */
     public String getSelectedSourceName() {
-        int idx = tabbedSource.getSelectedIndex();
-        return idx >= 0 ? tabbedSource.getTitleAt(idx) : null;
+        return findAuthNameByPanel(sourcePanels, tabbedSource.getSelectedComponent());
     }
 
     /** 获取 Target 当前选中的鉴权对象名称 */
     public String getSelectedTargetName() {
-        int idx = tabbedTarget.getSelectedIndex();
-        return idx >= 0 ? tabbedTarget.getTitleAt(idx) : null;
+        return findAuthNameByPanel(targetPanels, tabbedTarget.getSelectedComponent());
     }
 
     /** 获取选择区外层 TabbedPane */
@@ -243,12 +244,12 @@ public class ComparePanel extends JPanel {
 
         MessagePanel sourcePanel = new MessagePanel(api);
         sourcePanels.put(name, sourcePanel);
-        tabbedSource.addTab(name, sourcePanel);
+        tabbedSource.addTab(I18n.getInstance().translateAuthObjectName(name), sourcePanel);
         bindMessagePanelSync(sourcePanel, true);
 
         MessagePanel targetPanel = new MessagePanel(api);
         targetPanels.put(name, targetPanel);
-        tabbedTarget.addTab(name, targetPanel);
+        tabbedTarget.addTab(I18n.getInstance().translateAuthObjectName(name), targetPanel);
         bindMessagePanelSync(targetPanel, false);
     }
 
@@ -265,7 +266,7 @@ public class ComparePanel extends JPanel {
             sourcePanels.put(newName, sourcePanel);
             int idx = tabbedSource.indexOfComponent(sourcePanel);
             if (idx >= 0) {
-                tabbedSource.setTitleAt(idx, newName);
+                tabbedSource.setTitleAt(idx, I18n.getInstance().translateAuthObjectName(newName));
             }
         }
 
@@ -275,7 +276,49 @@ public class ComparePanel extends JPanel {
             targetPanels.put(newName, targetPanel);
             int idx = tabbedTarget.indexOfComponent(targetPanel);
             if (idx >= 0) {
-                tabbedTarget.setTitleAt(idx, newName);
+                tabbedTarget.setTitleAt(idx, I18n.getInstance().translateAuthObjectName(newName));
+            }
+        }
+    }
+
+    private MessagePanel findMessagePanelByComponent(Map<String, MessagePanel> panels, Component component) {
+        if (component instanceof MessagePanel panel) {
+            return panel;
+        }
+        for (MessagePanel panel : panels.values()) {
+            if (panel == component) {
+                return panel;
+            }
+        }
+        return null;
+    }
+
+    private String findAuthNameByPanel(Map<String, MessagePanel> panels, Component component) {
+        if (component == null) {
+            return null;
+        }
+        for (Map.Entry<String, MessagePanel> entry : panels.entrySet()) {
+            if (entry.getValue() == component) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
+
+    private void refreshTexts() {
+        labelTarget.setText("  " + I18n.getInstance().text("compare", "label.target"));
+        labelSource.setText("  " + I18n.getInstance().text("compare", "label.source"));
+        labelDiff.setText("  " + I18n.getInstance().text("compare", "label.diff"));
+        btnDiff.setText(I18n.getInstance().text("compare", "button.diff"));
+        refreshAuthObjectTabTitles(tabbedSource, sourcePanels);
+        refreshAuthObjectTabTitles(tabbedTarget, targetPanels);
+    }
+
+    private void refreshAuthObjectTabTitles(JTabbedPane tabbedPane, Map<String, MessagePanel> panels) {
+        for (Map.Entry<String, MessagePanel> entry : panels.entrySet()) {
+            int idx = tabbedPane.indexOfComponent(entry.getValue());
+            if (idx >= 0) {
+                tabbedPane.setTitleAt(idx, I18n.getInstance().translateAuthObjectName(entry.getKey()));
             }
         }
     }
@@ -314,6 +357,9 @@ public class ComparePanel extends JPanel {
         private final JTabbedPane tabbedTarget;
         private final JEditorPane editorPaneDiff;
         private final JButton btnDiff;
+        private final JLabel labelTarget;
+        private final JLabel labelSource;
+        private final JLabel labelDiff;
         private final Map<String, MessagePanel> sourcePanels;
         private final Map<String, MessagePanel> targetPanels;
 
@@ -323,7 +369,10 @@ public class ComparePanel extends JPanel {
             this.tabbedTarget = new JTabbedPane();
             this.editorPaneDiff = new JEditorPane("text/html", "");
             this.editorPaneDiff.setEditable(false);
-            this.btnDiff = new JButton("Diff");
+            this.btnDiff = new JButton();
+            this.labelTarget = new JLabel();
+            this.labelSource = new JLabel();
+            this.labelDiff = new JLabel();
             this.sourcePanels = new LinkedHashMap<>();
             this.targetPanels = new LinkedHashMap<>();
         }
@@ -337,11 +386,11 @@ public class ComparePanel extends JPanel {
         public Builder addAuthObject(String name) {
             MessagePanel sourcePanel = new MessagePanel(api);
             sourcePanels.put(name, sourcePanel);
-            tabbedSource.addTab(name, sourcePanel);
+            tabbedSource.addTab(I18n.getInstance().translateAuthObjectName(name), sourcePanel);
 
             MessagePanel targetPanel = new MessagePanel(api);
             targetPanels.put(name, targetPanel);
-            tabbedTarget.addTab(name, targetPanel);
+            tabbedTarget.addTab(I18n.getInstance().translateAuthObjectName(name), targetPanel);
             return this;
         }
 

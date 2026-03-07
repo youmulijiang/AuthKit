@@ -1,5 +1,7 @@
 package view.component;
 
+import utils.I18n;
+
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
 import java.awt.*;
@@ -15,7 +17,15 @@ import java.awt.*;
 public class ConfigurationPanel extends JPanel {
 
     /** DataTable 鉴权列可展示的指标选项 */
-    public static final String[] DISPLAY_METRICS = {"Length", "Status Code", "Hash", "AttributeNum", "Rank"};
+    public static final String METRIC_LENGTH = "Length";
+    public static final String METRIC_STATUS_CODE = "Status Code";
+    public static final String METRIC_HASH = "Hash";
+    public static final String METRIC_ATTRIBUTE_NUM = "AttributeNum";
+    public static final String METRIC_RANK = "Rank";
+
+    private static final String[] DISPLAY_METRIC_KEYS = {
+            METRIC_LENGTH, METRIC_STATUS_CODE, METRIC_HASH, METRIC_ATTRIBUTE_NUM, METRIC_RANK
+    };
 
     /** 禁用时文本框的背景色 */
     private static final Color DISABLED_BG = new Color(230, 230, 230);
@@ -23,7 +33,8 @@ public class ConfigurationPanel extends JPanel {
     // ===== 基础控制区 =====
     private final JCheckBox checkBoxEnabled;
     private final JButton btnClearTable;
-    private final JComboBox<String> comboBoxDisplayMetric;
+    private final JComboBox<MetricOption> comboBoxDisplayMetric;
+    private final JComboBox<I18n.Language> comboBoxLanguage;
 
     // ===== 域名作用域 =====
     private final JCheckBox checkBoxDomainFilter;
@@ -50,10 +61,20 @@ public class ConfigurationPanel extends JPanel {
     // ===== 认证头配置 =====
     private final JTextArea textAreaAuthHeaders;
 
+    private TitledBorder borderBasicControl;
+    private TitledBorder borderDomainScope;
+    private TitledBorder borderToolTypeScope;
+    private TitledBorder borderRequestFilter;
+    private TitledBorder borderAuthHeaders;
+    private JLabel labelDisplay;
+    private JLabel labelLanguage;
+    private boolean syncingLanguageSelection;
+
     private ConfigurationPanel(Builder builder) {
         this.checkBoxEnabled = builder.checkBoxEnabled;
         this.btnClearTable = builder.btnClearTable;
         this.comboBoxDisplayMetric = builder.comboBoxDisplayMetric;
+        this.comboBoxLanguage = builder.comboBoxLanguage;
         this.checkBoxDomainFilter = builder.checkBoxDomainFilter;
         this.textAreaDomain = builder.textAreaDomain;
         this.checkBoxScopeProxy = builder.checkBoxScopeProxy;
@@ -70,10 +91,20 @@ public class ConfigurationPanel extends JPanel {
         this.textFieldExtensionBlacklist = builder.textFieldExtensionBlacklist;
         this.textAreaAuthHeaders = builder.textAreaAuthHeaders;
         initLayout();
+        comboBoxLanguage.setSelectedItem(I18n.getInstance().getCurrentLanguage());
         // 根据默认状态设置可编辑性
         setConfigEditable(checkBoxEnabled.isSelected());
         // 绑定启停联动
         checkBoxEnabled.addActionListener(e -> setConfigEditable(checkBoxEnabled.isSelected()));
+        comboBoxLanguage.addActionListener(e -> {
+            if (syncingLanguageSelection) {
+                return;
+            }
+            I18n.Language language = (I18n.Language) comboBoxLanguage.getSelectedItem();
+            I18n.getInstance().setLanguage(language);
+        });
+        I18n.getInstance().addLanguageChangeListener(this::refreshTexts);
+        refreshTexts();
     }
 
     /**
@@ -114,7 +145,7 @@ public class ConfigurationPanel extends JPanel {
         checkBoxPathFilter.setEnabled(editable);
         checkBoxStatusCodeFilter.setEnabled(editable);
         checkBoxExtensionFilter.setEnabled(editable);
-        // comboBoxDisplayMetric 始终可用，启用插件时也可切换对比指标
+        // comboBoxDisplayMetric 和 comboBoxLanguage 始终可用
     }
 
     /** 初始化布局 */
@@ -141,19 +172,25 @@ public class ConfigurationPanel extends JPanel {
     /** 构建基础控制区 */
     private JPanel buildBasicControlSection() {
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
-        panel.setBorder(new TitledBorder("Basic Control"));
+        borderBasicControl = new TitledBorder("");
+        panel.setBorder(borderBasicControl);
+        labelDisplay = new JLabel();
+        labelLanguage = new JLabel();
         panel.add(checkBoxEnabled);
         panel.add(btnClearTable);
-        panel.add(new JLabel("Display:"));
+        panel.add(labelDisplay);
         panel.add(comboBoxDisplayMetric);
-        panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 60));
+        panel.add(labelLanguage);
+        panel.add(comboBoxLanguage);
+        panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 90));
         return panel;
     }
 
     /** 构建域名作用域区 */
     private JPanel buildDomainSection() {
         JPanel panel = new JPanel(new BorderLayout(5, 5));
-        panel.setBorder(new TitledBorder("Domain Scope"));
+        borderDomainScope = new TitledBorder("");
+        panel.setBorder(borderDomainScope);
         panel.add(checkBoxDomainFilter, BorderLayout.NORTH);
         panel.add(new JScrollPane(textAreaDomain), BorderLayout.CENTER);
         panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 150));
@@ -164,7 +201,8 @@ public class ConfigurationPanel extends JPanel {
     /** 构建 Tool Type Scope 区 */
     private JPanel buildToolTypeScopeSection() {
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
-        panel.setBorder(new TitledBorder("Tool Type Scope"));
+        borderToolTypeScope = new TitledBorder("");
+        panel.setBorder(borderToolTypeScope);
         panel.add(checkBoxScopeProxy);
         panel.add(checkBoxScopeRepeater);
         panel.add(checkBoxScopeIntruder);
@@ -177,7 +215,8 @@ public class ConfigurationPanel extends JPanel {
     private JPanel buildFilterSection() {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-        panel.setBorder(new TitledBorder("Request Filter"));
+        borderRequestFilter = new TitledBorder("");
+        panel.setBorder(borderRequestFilter);
 
         // HTTP 方法过滤
         JPanel panelMethod = new JPanel(new BorderLayout(5, 0));
@@ -218,11 +257,80 @@ public class ConfigurationPanel extends JPanel {
     /** 构建认证头配置区 */
     private JPanel buildAuthHeaderSection() {
         JPanel panel = new JPanel(new BorderLayout(5, 5));
-        panel.setBorder(new TitledBorder("Auth Headers (remove for unauthenticated request)"));
+        borderAuthHeaders = new TitledBorder("");
+        panel.setBorder(borderAuthHeaders);
         panel.add(new JScrollPane(textAreaAuthHeaders), BorderLayout.CENTER);
         panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 180));
         panel.setPreferredSize(new Dimension(0, 150));
         return panel;
+    }
+
+    private void refreshTexts() {
+        I18n i18n = I18n.getInstance();
+        borderBasicControl.setTitle(i18n.text("configuration", "section.basic"));
+        borderDomainScope.setTitle(i18n.text("configuration", "section.domain"));
+        borderToolTypeScope.setTitle(i18n.text("configuration", "section.toolScope"));
+        borderRequestFilter.setTitle(i18n.text("configuration", "section.filter"));
+        borderAuthHeaders.setTitle(i18n.text("configuration", "section.authHeaders"));
+
+        labelDisplay.setText(i18n.text("configuration", "label.display"));
+        labelLanguage.setText(i18n.text("configuration", "label.language"));
+        btnClearTable.setText(i18n.text("configuration", "button.clear"));
+        checkBoxEnabled.setText(i18n.text("configuration", "checkbox.enablePlugin"));
+        checkBoxDomainFilter.setText(i18n.text("configuration", "checkbox.enableDomainFilter"));
+        checkBoxScopeProxy.setText(i18n.text("configuration", "option.proxy"));
+        checkBoxScopeRepeater.setText(i18n.text("configuration", "option.repeater"));
+        checkBoxScopeIntruder.setText(i18n.text("configuration", "option.intruder"));
+        checkBoxScopeExtensions.setText(i18n.text("configuration", "option.extensions"));
+        checkBoxMethodFilter.setText(i18n.text("configuration", "checkbox.methodFilter"));
+        checkBoxPathFilter.setText(i18n.text("configuration", "checkbox.pathFilter"));
+        checkBoxStatusCodeFilter.setText(i18n.text("configuration", "checkbox.statusCodeFilter"));
+        checkBoxExtensionFilter.setText(i18n.text("configuration", "checkbox.extensionBlacklist"));
+
+        textAreaDomain.setToolTipText(i18n.text("configuration", "tooltip.domain"));
+        textAreaPath.setToolTipText(i18n.text("configuration", "tooltip.path"));
+        textFieldExtensionBlacklist.setToolTipText(i18n.text("configuration", "tooltip.extensionBlacklist"));
+        textAreaAuthHeaders.setToolTipText(i18n.text("configuration", "tooltip.authHeaders"));
+
+        refreshMetricOptions();
+        syncingLanguageSelection = true;
+        try {
+            comboBoxLanguage.setSelectedItem(i18n.getCurrentLanguage());
+        } finally {
+            syncingLanguageSelection = false;
+        }
+        revalidate();
+        repaint();
+    }
+
+    private void refreshMetricOptions() {
+        String selectedMetric = getSelectedDisplayMetric();
+        DefaultComboBoxModel<MetricOption> model = new DefaultComboBoxModel<>();
+        for (String key : DISPLAY_METRIC_KEYS) {
+            model.addElement(new MetricOption(key, getMetricLabel(key)));
+        }
+        comboBoxDisplayMetric.setModel(model);
+        restoreSelectedMetric(selectedMetric);
+    }
+
+    private void restoreSelectedMetric(String selectedMetric) {
+        for (int i = 0; i < comboBoxDisplayMetric.getItemCount(); i++) {
+            MetricOption option = comboBoxDisplayMetric.getItemAt(i);
+            if (option.key.equals(selectedMetric)) {
+                comboBoxDisplayMetric.setSelectedIndex(i);
+                return;
+            }
+        }
+    }
+
+    private String getMetricLabel(String metricKey) {
+        return switch (metricKey) {
+            case METRIC_STATUS_CODE -> I18n.getInstance().text("configuration", "metric.statusCode");
+            case METRIC_HASH -> I18n.getInstance().text("configuration", "metric.hash");
+            case METRIC_ATTRIBUTE_NUM -> I18n.getInstance().text("configuration", "metric.attributeNum");
+            case METRIC_RANK -> I18n.getInstance().text("configuration", "metric.rank");
+            default -> I18n.getInstance().text("configuration", "metric.length");
+        };
     }
 
     // ===== Getter 方法 =====
@@ -238,13 +346,18 @@ public class ConfigurationPanel extends JPanel {
     }
 
     /** 获取数据展示指标下拉框 */
-    public JComboBox<String> getComboBoxDisplayMetric() {
+    public JComboBox<MetricOption> getComboBoxDisplayMetric() {
         return comboBoxDisplayMetric;
+    }
+
+    public JComboBox<I18n.Language> getComboBoxLanguage() {
+        return comboBoxLanguage;
     }
 
     /** 获取当前选中的展示指标 */
     public String getSelectedDisplayMetric() {
-        return (String) comboBoxDisplayMetric.getSelectedItem();
+        MetricOption option = (MetricOption) comboBoxDisplayMetric.getSelectedItem();
+        return option != null ? option.key : METRIC_LENGTH;
     }
 
     /** 获取域名过滤开关 */
@@ -329,7 +442,8 @@ public class ConfigurationPanel extends JPanel {
 
         private final JCheckBox checkBoxEnabled;
         private final JButton btnClearTable;
-        private final JComboBox<String> comboBoxDisplayMetric;
+        private final JComboBox<MetricOption> comboBoxDisplayMetric;
+        private final JComboBox<I18n.Language> comboBoxLanguage;
         private final JCheckBox checkBoxDomainFilter;
         private final JTextArea textAreaDomain;
         private final JCheckBox checkBoxScopeProxy;
@@ -349,44 +463,55 @@ public class ConfigurationPanel extends JPanel {
         public Builder() {
             Font monoFont = new Font("Monospaced", Font.PLAIN, 12);
 
-            this.checkBoxEnabled = new JCheckBox("Enable Plugin", false);
-            this.btnClearTable = new JButton("Clear Table");
-            this.comboBoxDisplayMetric = new JComboBox<>(DISPLAY_METRICS);
-            this.comboBoxDisplayMetric.setSelectedItem("Length"); // 默认展示包长度
+            this.checkBoxEnabled = new JCheckBox("", false);
+            this.btnClearTable = new JButton();
+            this.comboBoxDisplayMetric = new JComboBox<>();
+            this.comboBoxLanguage = new JComboBox<>(I18n.Language.values());
 
-            this.checkBoxDomainFilter = new JCheckBox("Enable Domain Filter", false);
+            this.checkBoxDomainFilter = new JCheckBox("", false);
             this.textAreaDomain = new JTextArea();
             this.textAreaDomain.setFont(monoFont);
-            this.textAreaDomain.setToolTipText("One domain per line, e.g. example.com");
 
-            this.checkBoxScopeProxy = new JCheckBox("Proxy", true);
-            this.checkBoxScopeRepeater = new JCheckBox("Repeater", true);
-            this.checkBoxScopeIntruder = new JCheckBox("Intruder", false);
-            this.checkBoxScopeExtensions = new JCheckBox("Extensions", false);
+            this.checkBoxScopeProxy = new JCheckBox("", true);
+            this.checkBoxScopeRepeater = new JCheckBox("", true);
+            this.checkBoxScopeIntruder = new JCheckBox("", false);
+            this.checkBoxScopeExtensions = new JCheckBox("", false);
 
-            this.checkBoxMethodFilter = new JCheckBox("Method Filter", false);
+            this.checkBoxMethodFilter = new JCheckBox("", false);
             this.textFieldMethod = new JTextField("OPTIONS, HEAD, CONNECT");
 
-            this.checkBoxPathFilter = new JCheckBox("Path Filter", false);
+            this.checkBoxPathFilter = new JCheckBox("", false);
             this.textAreaPath = new JTextArea();
             this.textAreaPath.setFont(monoFont);
-            this.textAreaPath.setToolTipText("One path per line, e.g. /logout");
 
-            this.checkBoxStatusCodeFilter = new JCheckBox("Status Code Filter", true);
+            this.checkBoxStatusCodeFilter = new JCheckBox("", true);
             this.textFieldStatusCode = new JTextField("304, 204");
 
-            this.checkBoxExtensionFilter = new JCheckBox("Extension Blacklist", true);
+            this.checkBoxExtensionFilter = new JCheckBox("", true);
             this.textFieldExtensionBlacklist = new JTextField(model.ConfigModel.DEFAULT_EXTENSION_BLACKLIST);
-            this.textFieldExtensionBlacklist.setToolTipText("Comma-separated file extensions to exclude, e.g. css, js, png");
 
             this.textAreaAuthHeaders = new JTextArea("Cookie\nAuthorization\nToken");
             this.textAreaAuthHeaders.setFont(monoFont);
-            this.textAreaAuthHeaders.setToolTipText("One header name per line (case-sensitive)");
         }
 
         /** 构建配置面板 */
         public ConfigurationPanel build() {
             return new ConfigurationPanel(this);
+        }
+    }
+
+    public static final class MetricOption {
+        private final String key;
+        private final String label;
+
+        private MetricOption(String key, String label) {
+            this.key = key;
+            this.label = label;
+        }
+
+        @Override
+        public String toString() {
+            return label;
         }
     }
 }

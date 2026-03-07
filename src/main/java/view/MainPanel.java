@@ -1,6 +1,7 @@
 package view;
 
 import burp.api.montoya.MontoyaApi;
+import utils.I18n;
 import view.component.ComparePanel;
 import view.component.ConfigurationPanel;
 import view.component.DataTablePanel;
@@ -33,9 +34,7 @@ public class MainPanel extends JPanel {
      * @param api Montoya API 实例，用于创建 Burp 原生编辑器
      */
     public MainPanel(MontoyaApi api) {
-        this.panelToolbar = new ToolbarPanel.Builder()
-                .filterPlaceholder("Enter keyword to filter...")
-                .build();
+        this.panelToolbar = new ToolbarPanel.Builder().build();
         this.panelDataTable = new DataTablePanel.Builder().build();
         this.panelMetadataTable = new MetadataTablePanel.Builder().build();
         this.panelCompare = new ComparePanel.Builder(api).build();
@@ -44,6 +43,8 @@ public class MainPanel extends JPanel {
         this.tabbedRight = new JTabbedPane();
         initLayout();
         bindEvents();
+        I18n.getInstance().addLanguageChangeListener(this::refreshTexts);
+        refreshTexts();
     }
 
     /** 初始化主面板布局 */
@@ -63,9 +64,9 @@ public class MainPanel extends JPanel {
         panelLeft.add(splitLeftVertical, BorderLayout.CENTER);
 
         // 右侧面板: JTabbedPane（View / Configuration / User）
-        tabbedRight.addTab("View", panelCompare);
-        tabbedRight.addTab("Configuration", panelConfiguration);
-        tabbedRight.addTab("User", panelUser);
+        tabbedRight.addTab("", panelCompare);
+        tabbedRight.addTab("", panelConfiguration);
+        tabbedRight.addTab("", panelUser);
 
         // 左右水平分割
         JSplitPane splitMain = new JSplitPane(
@@ -97,6 +98,13 @@ public class MainPanel extends JPanel {
             panelMetadataTable.renameAuthRow(oldName, newName);
             panelCompare.renameAuthObject(oldName, newName);
         });
+    }
+
+    private void refreshTexts() {
+        I18n i18n = I18n.getInstance();
+        tabbedRight.setTitleAt(0, i18n.text("main", "tab.view"));
+        tabbedRight.setTitleAt(1, i18n.text("main", "tab.configuration"));
+        tabbedRight.setTitleAt(2, i18n.text("main", "tab.user"));
     }
 
     /** 获取工具栏面板 */

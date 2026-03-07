@@ -6,6 +6,7 @@ import burp.api.montoya.http.message.responses.HttpResponse;
 import burp.api.montoya.ui.editor.EditorOptions;
 import burp.api.montoya.ui.editor.HttpRequestEditor;
 import burp.api.montoya.ui.editor.HttpResponseEditor;
+import utils.I18n;
 
 import javax.swing.*;
 import java.awt.*;
@@ -34,9 +35,11 @@ public class MessagePanel extends JPanel {
         this.requestEditor = api.userInterface().createHttpRequestEditor(EditorOptions.READ_ONLY);
         this.responseEditor = api.userInterface().createHttpResponseEditor(EditorOptions.READ_ONLY);
         this.tabbedMessage = new JTabbedPane();
-        this.tabbedMessage.addTab("Request", requestEditor.uiComponent());
-        this.tabbedMessage.addTab("Response", responseEditor.uiComponent());
+        this.tabbedMessage.addTab("", requestEditor.uiComponent());
+        this.tabbedMessage.addTab("", responseEditor.uiComponent());
         initLayout();
+        I18n.getInstance().addLanguageChangeListener(this::refreshTexts);
+        refreshTexts();
     }
 
     /** 初始化布局 */
@@ -95,5 +98,10 @@ public class MessagePanel extends JPanel {
             return;
         }
         tabbedMessage.setSelectedIndex(tabIndex);
+    }
+
+    private void refreshTexts() {
+        tabbedMessage.setTitleAt(REQUEST_TAB_INDEX, I18n.getInstance().text("message", "tab.request"));
+        tabbedMessage.setTitleAt(RESPONSE_TAB_INDEX, I18n.getInstance().text("message", "tab.response"));
     }
 }

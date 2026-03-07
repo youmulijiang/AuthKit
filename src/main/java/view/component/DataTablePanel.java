@@ -1,5 +1,7 @@
 package view.component;
 
+import utils.I18n;
+
 import javax.swing.*;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
@@ -19,8 +21,8 @@ import java.util.function.Function;
  */
 public class DataTablePanel extends JPanel {
 
-    /** 固定列（不可删除） */
-    private static final String[] FIXED_COLUMNS = {"#", "Method", "URL"};
+    private static final int FIXED_COLUMN_COUNT = 3;
+    private static final String[] INITIAL_FIXED_COLUMNS = {"#", "Method", "URL"};
 
     /** 默认鉴权对象列 */
     private static final String[] DEFAULT_AUTH_COLUMNS = {"Original", "Unauthorized"};
@@ -42,6 +44,8 @@ public class DataTablePanel extends JPanel {
         this.rowSorter = new TableRowSorter<>(tableModel);
         this.tableData.setRowSorter(rowSorter);
         initLayout();
+        I18n.getInstance().addLanguageChangeListener(this::rebuildColumns);
+        rebuildColumns();
     }
 
     /** 初始化布局 */
@@ -116,11 +120,21 @@ public class DataTablePanel extends JPanel {
     /** 构建完整列名向量 */
     private Vector<String> buildColumnVector() {
         Vector<String> columns = new Vector<>();
-        for (String col : FIXED_COLUMNS) {
-            columns.add(col);
+        columns.add(I18n.getInstance().text("data_table", "column.id"));
+        columns.add(I18n.getInstance().text("data_table", "column.method"));
+        columns.add(I18n.getInstance().text("data_table", "column.url"));
+        for (String authColumn : authColumns) {
+            columns.add(I18n.getInstance().translateAuthObjectName(authColumn));
         }
-        columns.addAll(authColumns);
         return columns;
+    }
+
+    public String getAuthColumnKeyAtModelIndex(int modelColumn) {
+        int authIndex = modelColumn - FIXED_COLUMN_COUNT;
+        if (authIndex < 0 || authIndex >= authColumns.size()) {
+            return null;
+        }
+        return authColumns.get(authIndex);
     }
 
     /** 获取数据表格 */
@@ -186,7 +200,7 @@ public class DataTablePanel extends JPanel {
                 int modelRow = entry.getIdentifier();
 
                 switch (filterType) {
-                    case "All":
+                    case ToolbarPanel.FILTER_ALL:
                         // 搜索所有可见列 + 数据提供器的文本
                         for (int i = 0; i < entry.getValueCount(); i++) {
                             String cellValue = String.valueOf(entry.getValue(i));
@@ -202,10 +216,10 @@ public class DataTablePanel extends JPanel {
                         }
                         return false;
 
-                    case "Length":
-                    case "Hash":
+                    case ToolbarPanel.FILTER_LENGTH:
+                    case ToolbarPanel.FILTER_HASH:
                         // 搜索鉴权对象列中的数值
-                        for (int i = FIXED_COLUMNS.length; i < entry.getValueCount(); i++) {
+                        for (int i = FIXED_COLUMN_COUNT; i < entry.getValueCount(); i++) {
                             String cellValue = String.valueOf(entry.getValue(i));
                             if (cellValue.toLowerCase().contains(lowerKeyword)) {
                                 return true;
@@ -213,8 +227,8 @@ public class DataTablePanel extends JPanel {
                         }
                         return false;
 
-                    case "Request Content":
-                    case "Response Content":
+                    case ToolbarPanel.FILTER_REQUEST_CONTENT:
+                    case ToolbarPanel.FILTER_RESPONSE_CONTENT:
                         // 通过数据提供器搜索报文内容
                         if (dataProvider != null) {
                             String text = dataProvider.apply(modelRow);
@@ -245,7 +259,7 @@ public class DataTablePanel extends JPanel {
             }
 
             Vector<String> allColumns = new Vector<>();
-            for (String col : FIXED_COLUMNS) {
+            for (String col : INITIAL_FIXED_COLUMNS) {
                 allColumns.add(col);
             }
             allColumns.addAll(authColumns);
@@ -272,12 +286,9 @@ public class DataTablePanel extends JPanel {
 
     /**
      * 自定义单元格渲染器
-     * 非 Original 的鉴权对象列，值与 Original 列不同且非空时，背景染浅红色。
-     * 通过列名动态查找 Original 列位置，不依赖固定索引。
      */
     private static class AuthDiffCellRenderer extends DefaultTableCellRenderer {
 
-        private static final String ORIGINAL_COLUMN_NAME = "Original";
         private static final Color DIFF_COLOR = new Color(255, 204, 204);
 
         @Override
@@ -289,40 +300,17 @@ public class DataTablePanel extends JPanel {
             if (!isSelected) {
                 c.setBackground(table.getBackground());
 
-                String currentColName = table.getColumnName(column);
-                // 当前列不是固定列且不是 Original 列，才需要比较染色
-                if (!isFixedColumn(currentColName) && !ORIGINAL_COLUMN_NAME.equals(currentColName)) {
-                    int originalColIndex = findColumnIndex(table, ORIGINAL_COLUMN_NAME);
-                    if (originalColIndex >= 0 && !isEmpty(value)) {
-                        Object originalValue = table.getModel().getValueAt(row, originalColIndex);
-                        if (!isEmpty(originalValue) && !Objects.equals(value, originalValue)) {
-                            c.setBackground(DIFF_COLOR);
-                        }
+                int modelColumn = table.convertColumnIndexToModel(column);
+                if (modelColumn > FIXED_COLUMN_COUNT && !isEmpty(value)) {
+                    int modelRow = table.convertRowIndexToModel(row);
+                    Object originalValue = table.getModel().getValueAt(modelRow, FIXED_COLUMN_COUNT);
+                    if (!isEmpty(originalValue) && !Objects.equals(value, originalValue)) {
+                        c.setBackground(DIFF_COLOR);
                     }
                 }
             }
 
             return c;
-        }
-
-        /** 判断是否为固定列（#/Method/URL） */
-        private boolean isFixedColumn(String colName) {
-            for (String fixed : FIXED_COLUMNS) {
-                if (fixed.equals(colName)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        /** 根据列名查找列索引，找不到返回 -1 */
-        private int findColumnIndex(JTable table, String columnName) {
-            for (int i = 0; i < table.getColumnCount(); i++) {
-                if (columnName.equals(table.getColumnName(i))) {
-                    return i;
-                }
-            }
-            return -1;
         }
 
         /** 判断值是否为空（null 或空字符串） */

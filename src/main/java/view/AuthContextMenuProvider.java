@@ -5,6 +5,7 @@ import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.ui.contextmenu.ContextMenuEvent;
 import burp.api.montoya.ui.contextmenu.ContextMenuItemsProvider;
+import utils.I18n;
 
 import javax.swing.*;
 import java.awt.*;
@@ -22,10 +23,6 @@ import java.util.function.Supplier;
  * 2. Extract Auth to User — 从选中请求中提取认证头，填入指定鉴权用户配置
  */
 public class AuthContextMenuProvider implements ContextMenuItemsProvider {
-
-    private static final String MENU_SEND = "Send to AuthKit";
-    private static final String MENU_EXTRACT = "Extract Auth to User";
-    private static final String NEW_USER_LABEL = "+ New User";
 
     /**
      * 常见认证头关键字（小写），用于模糊匹配。
@@ -100,12 +97,12 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
      * 构建 "Send to AuthKit" 菜单项（单个按钮，主动发包并展示到 DataTable）
      */
     private Component buildSendMenu(List<HttpRequestResponse> selectedItems) {
-        JMenuItem item = new JMenuItem(MENU_SEND);
+        JMenuItem item = new JMenuItem(I18n.getInstance().text("auth_context_menu", "menu.send"));
         item.addActionListener(e -> {
             if (!enabledSupplier.get()) {
                 JOptionPane.showMessageDialog(null,
-                        "Plugin is not enabled. Please enable it in Configuration > Enable Plugin.",
-                        "Plugin Disabled",
+                        I18n.getInstance().text("auth_context_menu", "dialog.pluginDisabled.message"),
+                        I18n.getInstance().text("auth_context_menu", "dialog.pluginDisabled.title"),
                         JOptionPane.WARNING_MESSAGE);
                 return;
             }
@@ -119,7 +116,7 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
      */
     private Component buildExtractMenu(List<String> userNames,
                                         List<HttpRequestResponse> selectedItems) {
-        JMenu menu = new JMenu(MENU_EXTRACT);
+        JMenu menu = new JMenu(I18n.getInstance().text("auth_context_menu", "menu.extract"));
 
         // 已有的鉴权用户
         for (String name : userNames) {
@@ -136,7 +133,7 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
         }
 
         // "+ New User" 选项
-        JMenuItem newUserItem = new JMenuItem(NEW_USER_LABEL);
+        JMenuItem newUserItem = new JMenuItem(I18n.getInstance().text("auth_context_menu", "menu.newUser"));
         newUserItem.addActionListener(e -> {
             String authText = extractAuthHeaders(selectedItems);
             String newUserName = createUserHandler.get();

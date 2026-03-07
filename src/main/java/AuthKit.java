@@ -14,6 +14,7 @@ import model.CompareSampleModel;
 import model.ConfigModel;
 import model.MessageDataModel;
 import utils.ApiUtils;
+import utils.I18n;
 import utils.LogUtils;
 import view.AuthContextMenuProvider;
 import view.MainPanel;
@@ -144,7 +145,7 @@ public class AuthKit implements BurpExtension {
                 "[   Pwn The Planet, One HTTP at a Time  ]\n" +
                         "[#] Author: youmulijiang\n" +
                         "[#] Github: https://github.com/youmulijiang\n" +
-                        "[#] Version: 1.0.0\n"
+                        "[#] Version: 1.1.0\n"
         ));
     }
 
@@ -167,10 +168,10 @@ public class AuthKit implements BurpExtension {
                 MessageDataModel data = sample.getMessageData(authName);
                 if (data == null) continue;
                 switch (filterType) {
-                    case "Request Content":
+                    case ToolbarPanel.FILTER_REQUEST_CONTENT:
                         if (data.getRequest() != null) sb.append(data.getRequest()).append(" ");
                         break;
-                    case "Response Content":
+                    case ToolbarPanel.FILTER_RESPONSE_CONTENT:
                         if (data.getResponse() != null) sb.append(data.getResponse()).append(" ");
                         break;
                     default:
@@ -347,7 +348,10 @@ public class AuthKit implements BurpExtension {
             return;
         }
 
-        String authName = table.getModel().getColumnName(modelColumn);
+        String authName = mainPanel.getPanelDataTable().getAuthColumnKeyAtModelIndex(modelColumn);
+        if (authName == null) {
+            return;
+        }
         ComparePanel comparePanel = mainPanel.getPanelCompare();
         if (comparePanel.selectTargetTab(authName)) {
             comparePanel.selectTargetMessageTab(MessagePanel.RESPONSE_TAB_INDEX);
@@ -454,17 +458,22 @@ public class AuthKit implements BurpExtension {
      */
     private void bindDiffButton(ComparePanel comparePanel, DiffService diffService) {
         comparePanel.getBtnDiff().addActionListener(e -> {
+            I18n i18n = I18n.getInstance();
             MessagePanel sourcePanel = comparePanel.getSelectedSourcePanel();
             MessagePanel targetPanel = comparePanel.getSelectedTargetPanel();
             if (sourcePanel == null || targetPanel == null) {
-                comparePanel.setDiffContent("<html><body><p>请先选择 Source 和 Target 对象</p></body></html>");
+                comparePanel.setDiffContent("<html><body><p>"
+                        + i18n.text("compare", "message.selectSourceTarget")
+                        + "</p></body></html>");
                 return;
             }
 
             String sourceName = comparePanel.getSelectedSourceName();
             String targetName = comparePanel.getSelectedTargetName();
             int tabIndex = sourcePanel.getSelectedTabIndex();
-            String tabType = tabIndex == 0 ? "Request" : "Response";
+            String tabType = tabIndex == MessagePanel.REQUEST_TAB_INDEX
+                    ? i18n.text("message", "tab.request")
+                    : i18n.text("message", "tab.response");
 
             String sourceText;
             String targetText;
@@ -488,10 +497,15 @@ public class AuthKit implements BurpExtension {
             // 构建完整 HTML（含标题）
             StringBuilder html = new StringBuilder();
             html.append("<html><body style='font-family:Courier New;font-size:10pt;'>");
-            html.append("<b>Diff: ").append(sourceName).append(" (").append(tabType)
-                    .append(") &rarr; ").append(targetName).append(" (").append(tabType).append(")</b><br>");
+            html.append("<b>")
+                    .append(i18n.format("compare", "title.diff",
+                            i18n.translateAuthObjectName(sourceName), tabType,
+                            i18n.translateAuthObjectName(targetName), tabType))
+                    .append("</b><br>");
             if (diffBody.isEmpty()) {
-                html.append("<br><span style='color:green;'>无差异</span>");
+                html.append("<br><span style='color:green;'>")
+                        .append(i18n.text("compare", "message.noDiff"))
+                        .append("</span>");
             } else {
                 html.append(diffBody);
             }
