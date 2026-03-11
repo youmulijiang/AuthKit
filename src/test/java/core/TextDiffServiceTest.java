@@ -87,5 +87,23 @@ class TextDiffServiceTest {
         assertTrue(result.contains("Inserts:"));
         assertTrue(result.contains("Deletes:"));
     }
+
+    @Test
+    @DisplayName("大文本差异应降级为摘要或上下文模式，避免超大输出")
+    void largeText_shouldUseSummarizedOrContextOutput() {
+        StringBuilder original = new StringBuilder();
+        StringBuilder modified = new StringBuilder();
+        for (int i = 0; i < 3000; i++) {
+            original.append("line-").append(i).append('\n');
+            modified.append(i == 1500 ? "changed-line\n" : "line-").append(i == 1500 ? "" : i).append(i == 1500 ? "" : '\n');
+        }
+
+        String result = diffService.diff(original.toString(), modified.toString());
+
+        assertNotNull(result);
+        assertTrue(result.contains("Inserts:"));
+        assertTrue(result.contains("Deletes:"));
+        assertTrue(result.contains("omitted") || result.contains("summarized") || result.contains("truncated"));
+    }
 }
 

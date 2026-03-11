@@ -14,11 +14,19 @@ import java.util.Map;
  * 1. 选择区 (Source) - 外层 JTabbedPane 选项卡为鉴权对象（Original / Unauthorized / User1 ...），
  *    每个选项卡内嵌一个 MessagePanel（含 Request / Response 两个 Tab）。
  * 2. 被选择区 (Target) - 结构与选择区相同，用于选择被比较的鉴权对象。
- * 3. Diff 展示区 - 含 Diff 按钮和 JEditorPane（HTML）展示比较结果，支持颜色高亮。
+ * 3. Diff 展示区 - 自动对比，含进度条和 JEditorPane（HTML）展示比较结果，支持颜色高亮。
  */
 public class ComparePanel extends JPanel {
 
     private static final Font MONO_FONT = new Font("Monospaced", Font.PLAIN, 12);
+
+    /**
+     * Diff 回调接口，当 Source/Target 选项卡切换时自动调用
+     */
+    @FunctionalInterface
+    public interface DiffCallback {
+        void onDiffRequested(ComparePanel panel);
+    }
 
     /** 选择区：外层 TabbedPane，选项卡 = 鉴权对象 */
     private final JTabbedPane tabbedSource;
@@ -26,8 +34,8 @@ public class ComparePanel extends JPanel {
     private final JTabbedPane tabbedTarget;
     /** Diff 差异展示区（HTML 渲染） */
     private final JEditorPane editorPaneDiff;
-    /** Diff 按钮 */
-    private final JButton btnDiff;
+    /** Diff 进度条 */
+    private final JProgressBar progressBar;
     private final JLabel labelTarget;
     private final JLabel labelSource;
     private final JLabel labelDiff;
@@ -43,12 +51,19 @@ public class ComparePanel extends JPanel {
     /** 防止 Source/Target 双向同步时递归触发 */
     private boolean syncingMessageTabs;
 
+    /** Diff 回调，当 tab 切换时自动触发 */
+    private volatile DiffCallback diffCallback;
+
     private ComparePanel(Builder builder) {
         this.api = builder.api;
         this.tabbedSource = builder.tabbedSource;
         this.tabbedTarget = builder.tabbedTarget;
         this.editorPaneDiff = builder.editorPaneDiff;
-        this.btnDiff = builder.btnDiff;
+        this.progressBar = new JProgressBar();
+        this.progressBar.setIndeterminate(true);
+        this.progressBar.setStringPainted(true);
+        this.progressBar.setString("Comparing...");
+        this.progressBar.setVisible(false);
         this.labelTarget = builder.labelTarget;
         this.labelSource = builder.labelSource;
         this.labelDiff = builder.labelDiff;
@@ -74,10 +89,10 @@ public class ComparePanel extends JPanel {
         panelSource.add(labelSource, BorderLayout.NORTH);
         panelSource.add(tabbedSource, BorderLayout.CENTER);
 
-        // 区域3: Diff 展示区（含 Diff 按钮）
+        // 区域3: Diff 展示区（含进度条）
         JPanel panelDiffHeader = new JPanel(new BorderLayout());
         panelDiffHeader.add(labelDiff, BorderLayout.WEST);
-        panelDiffHeader.add(btnDiff, BorderLayout.EAST);
+        panelDiffHeader.add(progressBar, BorderLayout.CENTER);
 
         JPanel panelDiff = new JPanel(new BorderLayout());
         panelDiff.add(panelDiffHeader, BorderLayout.NORTH);
@@ -103,13 +118,22 @@ public class ComparePanel extends JPanel {
             bindMessagePanelSync(panel, false);
         }
 
-        tabbedSource.addChangeListener(e -> syncSelectedMessageTab(true));
-        tabbedTarget.addChangeListener(e -> syncSelectedMessageTab(false));
+        tabbedSource.addChangeListener(e -> {
+            syncSelectedMessageTab(true);
+            triggerAutoDiff();
+        });
+        tabbedTarget.addChangeListener(e -> {
+            syncSelectedMessageTab(false);
+            triggerAutoDiff();
+        });
     }
 
     /** 给 MessagePanel 注册双向同步监听 */
     private void bindMessagePanelSync(MessagePanel panel, boolean sourceSide) {
-        panel.getTabbedMessage().addChangeListener(e -> syncSelectedMessageTab(sourceSide));
+        panel.getTabbedMessage().addChangeListener(e -> {
+            syncSelectedMessageTab(sourceSide);
+            triggerAutoDiff();
+        });
     }
 
     /** 按当前选中的 Source/Target 同步内部 Request/Response 页签 */
@@ -168,9 +192,32 @@ public class ComparePanel extends JPanel {
         return editorPaneDiff;
     }
 
-    /** 获取 Diff 按钮 */
-    public JButton getBtnDiff() {
-        return btnDiff;
+    /** 设置 Diff 回调，当 tab 切换时自动触发 */
+    public void setDiffCallback(DiffCallback callback) {
+        this.diffCallback = callback;
+    }
+
+    /** 显示进度条（正在比较中） */
+    public void showProgress() {
+        progressBar.setVisible(true);
+    }
+
+    /** 隐藏进度条（比较完成） */
+    public void hideProgress() {
+        progressBar.setVisible(false);
+    }
+
+    /** 触发自动 diff */
+    private void triggerAutoDiff() {
+        DiffCallback cb = this.diffCallback;
+        if (cb != null) {
+            cb.onDiffRequested(this);
+        }
+    }
+
+    /** 对外触发一次自动 diff */
+    public void requestDiff() {
+        triggerAutoDiff();
     }
 
     /** 根据名称获取选择区中的 MessagePanel */
@@ -229,6 +276,7 @@ public class ComparePanel extends JPanel {
     public void clearAll() {
         sourcePanels.values().forEach(MessagePanel::clearContent);
         targetPanels.values().forEach(MessagePanel::clearContent);
+        hideProgress();
         editorPaneDiff.setText("");
     }
 
@@ -309,7 +357,7 @@ public class ComparePanel extends JPanel {
         labelTarget.setText("  " + I18n.getInstance().text("compare", "label.target"));
         labelSource.setText("  " + I18n.getInstance().text("compare", "label.source"));
         labelDiff.setText("  " + I18n.getInstance().text("compare", "label.diff"));
-        btnDiff.setText(I18n.getInstance().text("compare", "button.diff"));
+        progressBar.setString(I18n.getInstance().text("compare", "message.comparing"));
         refreshAuthObjectTabTitles(tabbedSource, sourcePanels);
         refreshAuthObjectTabTitles(tabbedTarget, targetPanels);
     }
@@ -356,7 +404,6 @@ public class ComparePanel extends JPanel {
         private final JTabbedPane tabbedSource;
         private final JTabbedPane tabbedTarget;
         private final JEditorPane editorPaneDiff;
-        private final JButton btnDiff;
         private final JLabel labelTarget;
         private final JLabel labelSource;
         private final JLabel labelDiff;
@@ -369,7 +416,6 @@ public class ComparePanel extends JPanel {
             this.tabbedTarget = new JTabbedPane();
             this.editorPaneDiff = new JEditorPane("text/html", "");
             this.editorPaneDiff.setEditable(false);
-            this.btnDiff = new JButton();
             this.labelTarget = new JLabel();
             this.labelSource = new JLabel();
             this.labelDiff = new JLabel();

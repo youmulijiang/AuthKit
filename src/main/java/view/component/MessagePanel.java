@@ -25,6 +25,8 @@ public class MessagePanel extends JPanel {
     private final JTabbedPane tabbedMessage;
     private final HttpRequestEditor requestEditor;
     private final HttpResponseEditor responseEditor;
+    private String requestText = "";
+    private String responseText = "";
 
     /**
      * 构造报文面板
@@ -63,6 +65,16 @@ public class MessagePanel extends JPanel {
         return responseEditor;
     }
 
+    /** 获取缓存的请求报文文本 */
+    public String getRequestText() {
+        return requestText;
+    }
+
+    /** 获取缓存的响应报文文本 */
+    public String getResponseText() {
+        return responseText;
+    }
+
     /**
      * 设置报文内容（使用 Montoya 原始对象）
      *
@@ -70,6 +82,17 @@ public class MessagePanel extends JPanel {
      * @param response Montoya HttpResponse 对象
      */
     public void setContent(HttpRequest request, HttpResponse response) {
+        setContent(request, response,
+                request != null ? request.toString() : "",
+                response != null ? response.toString() : "");
+    }
+
+    /**
+     * 设置报文内容（同时写入编辑器和缓存文本）
+     */
+    public void setContent(HttpRequest request, HttpResponse response, String requestText, String responseText) {
+        this.requestText = requestText != null ? requestText : "";
+        this.responseText = responseText != null ? responseText : "";
         if (request != null) {
             requestEditor.setRequest(request);
         }
@@ -80,6 +103,8 @@ public class MessagePanel extends JPanel {
 
     /** 清空报文内容 */
     public void clearContent() {
+        requestText = "";
+        responseText = "";
         requestEditor.setRequest(HttpRequest.httpRequest(""));
         responseEditor.setResponse(HttpResponse.httpResponse(""));
     }

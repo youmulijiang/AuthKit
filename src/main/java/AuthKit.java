@@ -30,13 +30,18 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 
 public class AuthKit implements BurpExtension {
 
+    private static final int AUTO_DIFF_DEBOUNCE_MS = 180;
     private static final int DATA_TABLE_FIXED_COLUMN_COUNT = 3;
 
     private ExecutorService executor;
+    private ExecutorService diffExecutor;
 
     @Override
     public void initialize(MontoyaApi montoyaApi) {
@@ -48,6 +53,11 @@ public class AuthKit implements BurpExtension {
 
         // 创建线程池
         executor = Executors.newFixedThreadPool(3);
+        diffExecutor = Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "authkit-diff-worker");
+            thread.setDaemon(true);
+            return thread;
+        });
 
         // 创建 UI（传入 MontoyaApi 以创建 Burp 原生编辑器）
         MainPanel mainPanel = new MainPanel(montoyaApi);
@@ -92,8 +102,8 @@ public class AuthKit implements BurpExtension {
         // 绑定 DataTable 行选中事件 → 更新 MetadataTable + ComparePanel
         bindTableSelection(mainPanel, controller);
 
-        // 绑定 Diff 按钮事件
-        bindDiffButton(mainPanel.getPanelCompare(), diffService);
+        // 绑定自动 Diff 事件（懒加载，tab 切换时自动触发）
+        bindAutoDiff(mainPanel.getPanelCompare(), diffService);
 
         // 注册右键菜单
         registerContextMenu(montoyaApi, mainPanel, controller, configModel, replayService);
@@ -134,6 +144,9 @@ public class AuthKit implements BurpExtension {
         // 注册插件卸载时清理线程池
         montoyaApi.extension().registerUnloadingHandler(() -> {
             executor.shutdownNow();
+            if (diffExecutor != null) {
+                diffExecutor.shutdownNow();
+            }
             LogUtils.INSTANCE.info("AuthKit 插件已卸载");
         });
 
@@ -437,7 +450,8 @@ public class AuthKit implements BurpExtension {
         for (Map.Entry<String, MessagePanel> entry : sourcePanels.entrySet()) {
             MessageDataModel data = sample.getMessageData(entry.getKey());
             if (data != null) {
-                entry.getValue().setContent(data.getHttpRequest(), data.getHttpResponse());
+                entry.getValue().setContent(data.getHttpRequest(), data.getHttpResponse(),
+                        data.getRequest(), data.getResponse());
             } else {
                 entry.getValue().clearContent();
             }
@@ -445,74 +459,150 @@ public class AuthKit implements BurpExtension {
         for (Map.Entry<String, MessagePanel> entry : targetPanels.entrySet()) {
             MessageDataModel data = sample.getMessageData(entry.getKey());
             if (data != null) {
-                entry.getValue().setContent(data.getHttpRequest(), data.getHttpResponse());
+                entry.getValue().setContent(data.getHttpRequest(), data.getHttpResponse(),
+                        data.getRequest(), data.getResponse());
             } else {
                 entry.getValue().clearContent();
             }
         }
+
+        comparePanel.requestDiff();
     }
 
     /**
-     * 绑定 Diff 按钮事件
-     * 根据 Source/Target 当前选中的 Tab 类型（Request/Response）自动对比对应内容
+     * 绑定自动 Diff 事件（懒加载）
+     * 当 Source/Target 选项卡或内部 Request/Response 页签切换时，自动在后台线程执行 Diff，
+     * 比较过程中显示进度条，完成后更新 Diff 展示区。
      */
-    private void bindDiffButton(ComparePanel comparePanel, DiffService diffService) {
-        comparePanel.getBtnDiff().addActionListener(e -> {
+    private void bindAutoDiff(ComparePanel comparePanel, DiffService diffService) {
+        AtomicInteger requestVersion = new AtomicInteger();
+        AtomicReference<DiffContext> pendingContextRef = new AtomicReference<>();
+        AtomicBoolean diffRunning = new AtomicBoolean(false);
+
+        Runnable scheduleLatestDiff = new Runnable() {
+            @Override
+            public void run() {
+                if (!diffRunning.compareAndSet(false, true)) {
+                    return;
+                }
+
+                DiffContext context = pendingContextRef.getAndSet(null);
+                if (context == null) {
+                    diffRunning.set(false);
+                    comparePanel.hideProgress();
+                    return;
+                }
+
+                comparePanel.showProgress();
+                diffExecutor.submit(() -> {
+                    String diffBody = "";
+                    Exception error = null;
+                    try {
+                        diffBody = diffService.diff(context.sourceText(), context.targetText());
+                    } catch (Exception ex) {
+                        error = ex;
+                    }
+
+                    String finalDiffBody = diffBody;
+                    Exception finalError = error;
+                    SwingUtilities.invokeLater(() -> {
+                        try {
+                            if (context.version() == requestVersion.get()) {
+                                if (finalError == null) {
+                                    comparePanel.setDiffContent(buildDiffHtml(
+                                            context.sourceName(), context.targetName(),
+                                            context.tabType(), finalDiffBody));
+                                } else {
+                                    comparePanel.setDiffContent("<html><body><p>Diff error: "
+                                            + finalError.getMessage() + "</p></body></html>");
+                                }
+                            }
+                        } finally {
+                            diffRunning.set(false);
+                            if (pendingContextRef.get() != null) {
+                                this.run();
+                            } else {
+                                comparePanel.hideProgress();
+                            }
+                        }
+                    });
+                });
+            }
+        };
+
+        Timer debounceTimer = new Timer(AUTO_DIFF_DEBOUNCE_MS, e -> {
+            DiffContext context = pendingContextRef.get();
+            if (context == null) {
+                return;
+            }
+
+            comparePanel.showProgress();
+            scheduleLatestDiff.run();
+        });
+        debounceTimer.setRepeats(false);
+
+        comparePanel.setDiffCallback(panel -> {
             I18n i18n = I18n.getInstance();
-            MessagePanel sourcePanel = comparePanel.getSelectedSourcePanel();
-            MessagePanel targetPanel = comparePanel.getSelectedTargetPanel();
+            MessagePanel sourcePanel = panel.getSelectedSourcePanel();
+            MessagePanel targetPanel = panel.getSelectedTargetPanel();
             if (sourcePanel == null || targetPanel == null) {
-                comparePanel.setDiffContent("<html><body><p>"
+                debounceTimer.stop();
+                requestVersion.incrementAndGet();
+                pendingContextRef.set(null);
+                panel.hideProgress();
+                panel.setDiffContent("<html><body><p>"
                         + i18n.text("compare", "message.selectSourceTarget")
                         + "</p></body></html>");
                 return;
             }
 
-            String sourceName = comparePanel.getSelectedSourceName();
-            String targetName = comparePanel.getSelectedTargetName();
+            String sourceName = panel.getSelectedSourceName();
+            String targetName = panel.getSelectedTargetName();
             int tabIndex = sourcePanel.getSelectedTabIndex();
             String tabType = tabIndex == MessagePanel.REQUEST_TAB_INDEX
                     ? i18n.text("message", "tab.request")
                     : i18n.text("message", "tab.response");
 
-            String sourceText;
-            String targetText;
+            String sourceText = tabIndex == MessagePanel.REQUEST_TAB_INDEX
+                    ? sourcePanel.getRequestText()
+                    : sourcePanel.getResponseText();
+            String targetText = tabIndex == MessagePanel.REQUEST_TAB_INDEX
+                    ? targetPanel.getRequestText()
+                    : targetPanel.getResponseText();
 
-            if (tabIndex == 0) {
-                // Request Tab
-                sourceText = sourcePanel.getRequestEditor().getRequest() != null
-                        ? sourcePanel.getRequestEditor().getRequest().toString() : "";
-                targetText = targetPanel.getRequestEditor().getRequest() != null
-                        ? targetPanel.getRequestEditor().getRequest().toString() : "";
-            } else {
-                // Response Tab
-                sourceText = sourcePanel.getResponseEditor().getResponse() != null
-                        ? sourcePanel.getResponseEditor().getResponse().toString() : "";
-                targetText = targetPanel.getResponseEditor().getResponse() != null
-                        ? targetPanel.getResponseEditor().getResponse().toString() : "";
-            }
-
-            String diffBody = diffService.diff(sourceText, targetText);
-
-            // 构建完整 HTML（含标题）
-            StringBuilder html = new StringBuilder();
-            html.append("<html><body style='font-family:Courier New;font-size:10pt;'>");
-            html.append("<b>")
-                    .append(i18n.format("compare", "title.diff",
-                            i18n.translateAuthObjectName(sourceName), tabType,
-                            i18n.translateAuthObjectName(targetName), tabType))
-                    .append("</b><br>");
-            if (diffBody.isEmpty()) {
-                html.append("<br><span style='color:green;'>")
-                        .append(i18n.text("compare", "message.noDiff"))
-                        .append("</span>");
-            } else {
-                html.append(diffBody);
-            }
-            html.append("</body></html>");
-
-            comparePanel.setDiffContent(html.toString());
+            pendingContextRef.set(new DiffContext(
+                    requestVersion.incrementAndGet(),
+                    sourceName,
+                    targetName,
+                    tabType,
+                    sourceText,
+                    targetText));
+            debounceTimer.restart();
         });
+    }
+
+    private String buildDiffHtml(String sourceName, String targetName, String tabType, String diffBody) {
+        I18n i18n = I18n.getInstance();
+        StringBuilder html = new StringBuilder();
+        html.append("<html><body style='font-family:Courier New;font-size:10pt;'>");
+        html.append("<b>")
+                .append(i18n.format("compare", "title.diff",
+                        i18n.translateAuthObjectName(sourceName), tabType,
+                        i18n.translateAuthObjectName(targetName), tabType))
+                .append("</b><br>");
+        if (diffBody.isEmpty()) {
+            html.append("<br><span style='color:green;'>")
+                    .append(i18n.text("compare", "message.noDiff"))
+                    .append("</span>");
+        } else {
+            html.append(diffBody);
+        }
+        html.append("</body></html>");
+        return html.toString();
+    }
+
+    private record DiffContext(int version, String sourceName, String targetName,
+                               String tabType, String sourceText, String targetText) {
     }
 
     /**
