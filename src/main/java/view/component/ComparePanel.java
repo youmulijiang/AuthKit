@@ -48,6 +48,18 @@ public class ComparePanel extends JPanel {
     /** Montoya API 引用，用于运行时创建新的 MessagePanel */
     private final MontoyaApi api;
 
+    /** 三个区域面板引用，用于展开/折叠 */
+    private JPanel panelTarget;
+    private JPanel panelSource;
+    private JPanel panelDiff;
+    private JSplitPane splitMain;
+    private JSplitPane splitBottom;
+
+    /** 展开/折叠按钮 */
+    private final JToggleButton btnExpandTarget = new JToggleButton("Expand");
+    private final JToggleButton btnExpandSource = new JToggleButton("Expand");
+    private final JToggleButton btnExpandDiff = new JToggleButton("Expand");
+
     /** 防止 Source/Target 双向同步时递归触发 */
     private boolean syncingMessageTabs;
 
@@ -79,31 +91,80 @@ public class ComparePanel extends JPanel {
     private void initLayout() {
         setLayout(new BorderLayout());
 
-        // 区域1: 被选择区
-        JPanel panelTarget = new JPanel(new BorderLayout());
-        panelTarget.add(labelTarget, BorderLayout.NORTH);
+        // 区域1: Target (被选择区)
+        JPanel panelTargetHeader = new JPanel(new BorderLayout());
+        panelTargetHeader.add(labelTarget, BorderLayout.CENTER);
+        panelTargetHeader.add(btnExpandTarget, BorderLayout.EAST);
+
+        panelTarget = new JPanel(new BorderLayout());
+        panelTarget.add(panelTargetHeader, BorderLayout.NORTH);
         panelTarget.add(tabbedTarget, BorderLayout.CENTER);
 
-        // 区域2: 选择区
-        JPanel panelSource = new JPanel(new BorderLayout());
-        panelSource.add(labelSource, BorderLayout.NORTH);
+        // 区域2: Source (选择区)
+        JPanel panelSourceHeader = new JPanel(new BorderLayout());
+        panelSourceHeader.add(labelSource, BorderLayout.CENTER);
+        panelSourceHeader.add(btnExpandSource, BorderLayout.EAST);
+
+        panelSource = new JPanel(new BorderLayout());
+        panelSource.add(panelSourceHeader, BorderLayout.NORTH);
         panelSource.add(tabbedSource, BorderLayout.CENTER);
 
-        // 区域3: Diff 展示区（含进度条）
+        // 区域3: Diff 展示区（含进度条和展开按钮）
         JPanel panelDiffHeader = new JPanel(new BorderLayout());
         panelDiffHeader.add(labelDiff, BorderLayout.WEST);
         panelDiffHeader.add(progressBar, BorderLayout.CENTER);
+        panelDiffHeader.add(btnExpandDiff, BorderLayout.EAST);
 
-        JPanel panelDiff = new JPanel(new BorderLayout());
+        panelDiff = new JPanel(new BorderLayout());
         panelDiff.add(panelDiffHeader, BorderLayout.NORTH);
         panelDiff.add(new JScrollPane(editorPaneDiff), BorderLayout.CENTER);
 
-        JSplitPane splitBottom = new JSplitPane(JSplitPane.VERTICAL_SPLIT, panelSource, panelDiff);
+        splitBottom = new JSplitPane(JSplitPane.VERTICAL_SPLIT, panelSource, panelDiff);
         splitBottom.setResizeWeight(0.5);
 
-        JSplitPane splitMain = new JSplitPane(JSplitPane.VERTICAL_SPLIT, panelTarget, splitBottom);
+        splitMain = new JSplitPane(JSplitPane.VERTICAL_SPLIT, panelTarget, splitBottom);
         splitMain.setResizeWeight(0.33);
 
+        add(splitMain, BorderLayout.CENTER);
+
+        // 绑定展开/折叠事件
+        btnExpandTarget.addActionListener(e -> toggleExpand(panelTarget, btnExpandTarget));
+        btnExpandSource.addActionListener(e -> toggleExpand(panelSource, btnExpandSource));
+        btnExpandDiff.addActionListener(e -> toggleExpand(panelDiff, btnExpandDiff));
+    }
+
+    /** 展开或折叠指定面板 */
+    private void toggleExpand(JPanel panel, JToggleButton clickedBtn) {
+        if (clickedBtn.isSelected()) {
+            // 展开：只显示当前面板
+            removeAll();
+            add(panel, BorderLayout.CENTER);
+            clickedBtn.setText("Collapse");
+            // 取消其他按钮的选中状态
+            for (JToggleButton btn : new JToggleButton[]{btnExpandTarget, btnExpandSource, btnExpandDiff}) {
+                if (btn != clickedBtn) {
+                    btn.setSelected(false);
+                    btn.setText("Expand");
+                }
+            }
+        } else {
+            // 折叠：恢复三分布局
+            removeAll();
+            restoreSplitLayout();
+            clickedBtn.setText("Expand");
+        }
+        revalidate();
+        repaint();
+    }
+
+    /** 恢复三分布局 */
+    private void restoreSplitLayout() {
+        splitBottom.setTopComponent(panelSource);
+        splitBottom.setBottomComponent(panelDiff);
+        splitBottom.setResizeWeight(0.5);
+        splitMain.setTopComponent(panelTarget);
+        splitMain.setBottomComponent(splitBottom);
+        splitMain.setResizeWeight(0.33);
         add(splitMain, BorderLayout.CENTER);
     }
 

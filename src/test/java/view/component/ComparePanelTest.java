@@ -127,12 +127,25 @@ class ComparePanelTest {
     }
 
     private String findLabelText(Container container) {
+        String result = findLabelTextIn(container);
+        if (result == null) {
+            fail("Expected label not found");
+        }
+        return result;
+    }
+
+    private String findLabelTextIn(Container container) {
         for (Component component : container.getComponents()) {
             if (component instanceof JLabel label) {
                 return label.getText().trim();
             }
+            if (component instanceof Container child) {
+                String result = findLabelTextIn(child);
+                if (result != null) {
+                    return result;
+                }
+            }
         }
-        fail("Expected label not found");
-        return "";
+        return null;
     }
 }
