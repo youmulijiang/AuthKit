@@ -14,6 +14,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -47,14 +48,14 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
     /** Extract 处理回调：(提取到的认证头文本, 目标用户名称，null 表示新建用户) */
     private final BiConsumer<String, String> extractHandler;
 
-    /** 新建用户回调：返回新建用户的名称 */
-    private final Supplier<String> createUserHandler;
+    /** 新建用户回调：接收提取到的认证头文本，返回新建用户的名称（null 表示取消） */
+    private final Function<String, String> createUserHandler;
 
     public AuthContextMenuProvider(Supplier<List<String>> userNamesSupplier,
                                     Supplier<Boolean> enabledSupplier,
                                     Consumer<List<HttpRequestResponse>> sendHandler,
                                     BiConsumer<String, String> extractHandler,
-                                    Supplier<String> createUserHandler) {
+                                    Function<String, String> createUserHandler) {
         this.userNamesSupplier = userNamesSupplier;
         this.enabledSupplier = enabledSupplier;
         this.sendHandler = sendHandler;
@@ -136,10 +137,15 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
         JMenuItem newUserItem = new JMenuItem(I18n.getInstance().text("auth_context_menu", "menu.newUser"));
         newUserItem.addActionListener(e -> {
             String authText = extractAuthHeaders(selectedItems);
-            String newUserName = createUserHandler.get();
-            if (newUserName != null && !newUserName.isEmpty()) {
-                extractHandler.accept(authText, newUserName);
+            if (authText.isEmpty()) {
+                JOptionPane.showMessageDialog(null,
+                        I18n.getInstance().text("auth_context_menu", "dialog.noMessage.message"),
+                        I18n.getInstance().text("auth_context_menu", "dialog.noMessage.title"),
+                        JOptionPane.WARNING_MESSAGE);
+                return;
             }
+            // createUserHandler 内部会弹出新建用户对话框，传入认证头文本
+            createUserHandler.apply(authText);
         });
         menu.add(newUserItem);
 

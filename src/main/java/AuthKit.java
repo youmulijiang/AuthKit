@@ -158,7 +158,7 @@ public class AuthKit implements BurpExtension {
                 "[   Pwn The Planet, One HTTP at a Time  ]\n" +
                         "[#] Author: youmulijiang\n" +
                         "[#] Github: https://github.com/youmulijiang\n" +
-                        "[#] Version: 1.3.0\n"
+                        "[#] Version: 1.4.0\n"
         ));
     }
 
@@ -645,23 +645,39 @@ public class AuthKit implements BurpExtension {
             });
         };
 
-        // 新建用户回调：通过 UserPanel 添加用户并返回名称
-        java.util.function.Supplier<String> createUserHandler = () -> {
-            // 需要在 EDT 线程中执行 UI 操作，但 Supplier 需要同步返回结果
-            // 使用 invokeAndWait 确保在 EDT 中创建用户
+        // 新建用户回调：弹出新建用户对话框，用户确认后创建用户并返回名称
+        java.util.function.Function<String, String> createUserHandler = (authText) -> {
             final String[] newName = {null};
             try {
+                Runnable showDialog = () -> {
+                    // 生成默认名称
+                    UserPanel userPanel = mainPanel.getPanelUser();
+                    String defaultName = "User" + (userPanel.getUserCount() + 1);
+
+                    // 弹出新建用户对话框
+                    NewUserDialog.UserConfig config =
+                            NewUserDialog.show(mainPanel, defaultName, authText);
+                    if (config == null) {
+                        return; // 用户取消
+                    }
+
+                    // 创建用户并应用对话框中的配置
+                    AuthUserConfigPanel panel = userPanel.addUser();
+                    panel.getTextFieldName().setText(config.name());
+                    panel.getCheckBoxEnabled().setSelected(config.enabled());
+                    panel.getTextAreaAuthHeaders().setText(config.authHeaders());
+                    panel.getTextAreaParamReplacement().setText(config.paramReplacement());
+                    newName[0] = config.name();
+                    LogUtils.INSTANCE.info("Created new user via dialog: " + config.name());
+                };
+
                 if (SwingUtilities.isEventDispatchThread()) {
-                    AuthUserConfigPanel panel = mainPanel.getPanelUser().addUser();
-                    newName[0] = panel.getUserName();
+                    showDialog.run();
                 } else {
-                    SwingUtilities.invokeAndWait(() -> {
-                        AuthUserConfigPanel panel = mainPanel.getPanelUser().addUser();
-                        newName[0] = panel.getUserName();
-                    });
+                    SwingUtilities.invokeAndWait(showDialog);
                 }
             } catch (Exception ex) {
-                LogUtils.INSTANCE.error("Error creating new user", ex);
+                LogUtils.INSTANCE.error("Error creating new user via dialog", ex);
             }
             return newName[0];
         };
