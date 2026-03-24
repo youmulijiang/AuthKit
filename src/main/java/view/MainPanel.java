@@ -67,6 +67,7 @@ public class MainPanel extends JPanel {
         tabbedRight.addTab("", panelCompare);
         tabbedRight.addTab("", panelConfiguration);
         tabbedRight.addTab("", panelUser);
+        tabbedRight.setSelectedComponent(panelConfiguration);
 
         // 左右水平分割
         JSplitPane splitMain = new JSplitPane(
