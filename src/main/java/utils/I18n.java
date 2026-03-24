@@ -22,7 +22,7 @@ public final class I18n {
     private static final List<String> RESOURCE_AREAS = List.of(
             "common", "main", "toolbar", "configuration",
             "data_table", "metadata_table", "compare", "message",
-            "user", "auth_context_menu");
+            "user", "auth_context_menu", "jwt");
     private static final Set<String> CHINESE_TIME_ZONES = Set.of(
             "asia/shanghai", "asia/chongqing", "asia/harbin", "asia/urumqi",
             "asia/hong_kong", "asia/hongkong", "asia/macau", "asia/taipei");

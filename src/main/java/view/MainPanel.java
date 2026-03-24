@@ -5,6 +5,7 @@ import utils.I18n;
 import view.component.ComparePanel;
 import view.component.ConfigurationPanel;
 import view.component.DataTablePanel;
+import view.component.JwtPanel;
 import view.component.MetadataTablePanel;
 import view.component.ToolbarPanel;
 import view.component.UserPanel;
@@ -27,6 +28,7 @@ public class MainPanel extends JPanel {
     private final ComparePanel panelCompare;
     private final ConfigurationPanel panelConfiguration;
     private final UserPanel panelUser;
+    private final JwtPanel panelJwt;
 
     /**
      * 构造主面板
@@ -40,6 +42,7 @@ public class MainPanel extends JPanel {
         this.panelCompare = new ComparePanel.Builder(api).build();
         this.panelConfiguration = new ConfigurationPanel.Builder().build();
         this.panelUser = new UserPanel.Builder().build();
+        this.panelJwt = new JwtPanel();
         this.tabbedRight = new JTabbedPane();
         initLayout();
         bindEvents();
@@ -67,6 +70,7 @@ public class MainPanel extends JPanel {
         tabbedRight.addTab("", panelCompare);
         tabbedRight.addTab("", panelConfiguration);
         tabbedRight.addTab("", panelUser);
+        tabbedRight.addTab("", panelJwt);
         tabbedRight.setSelectedComponent(panelConfiguration);
 
         // 左右水平分割
@@ -106,6 +110,7 @@ public class MainPanel extends JPanel {
         tabbedRight.setTitleAt(0, i18n.text("main", "tab.view"));
         tabbedRight.setTitleAt(1, i18n.text("main", "tab.configuration"));
         tabbedRight.setTitleAt(2, i18n.text("main", "tab.user"));
+        tabbedRight.setTitleAt(3, i18n.text("main", "tab.jwt"));
     }
 
     /** 获取工具栏面板 */
@@ -141,5 +146,10 @@ public class MainPanel extends JPanel {
     /** 获取用户面板（User 选项卡） */
     public UserPanel getPanelUser() {
         return panelUser;
+    }
+
+    /** 获取JWT面板（JWT 选项卡） */
+    public JwtPanel getPanelJwt() {
+        return panelJwt;
     }
 }

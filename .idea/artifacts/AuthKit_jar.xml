@@ -3,9 +3,13 @@
     <output-path>$PROJECT_DIR$/out/artifacts/AuthKit_jar</output-path>
     <root id="archive" name="AuthKit.jar">
       <element id="module-output" name="AuthKit" />
+      <element id="extracted-dir" path="$MAVEN_REPOSITORY$/com/fasterxml/jackson/core/jackson-core/2.21.0/jackson-core-2.21.0.jar" path-in-jar="/" />
       <element id="extracted-dir" path="$MAVEN_REPOSITORY$/net/portswigger/burp/extensions/montoya-api/2025.3/montoya-api-2025.3.jar" path-in-jar="/" />
-      <element id="extracted-dir" path="$MAVEN_REPOSITORY$/tools/jackson/core/jackson-core/3.1.0/jackson-core-3.1.0.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$MAVEN_REPOSITORY$/com/fasterxml/jackson/core/jackson-annotations/2.21/jackson-annotations-2.21.jar" path-in-jar="/" />
       <element id="extracted-dir" path="$MAVEN_REPOSITORY$/io/github/java-diff-utils/java-diff-utils/4.15/java-diff-utils-4.15.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$MAVEN_REPOSITORY$/com/fasterxml/jackson/core/jackson-databind/2.21.0/jackson-databind-2.21.0.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$MAVEN_REPOSITORY$/tools/jackson/core/jackson-core/3.1.0/jackson-core-3.1.0.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$MAVEN_REPOSITORY$/com/auth0/java-jwt/4.5.1/java-jwt-4.5.1.jar" path-in-jar="/" />
     </root>
   </artifact>
 </component>
