@@ -663,10 +663,15 @@ public class AuthKit implements BurpExtension {
 
                     // 创建用户并应用对话框中的配置
                     AuthUserConfigPanel panel = userPanel.addUser();
-                    panel.getTextFieldName().setText(config.name());
+                    // addUser() 使用自动生成的名称（如 "User1"），需要获取该名称
+                    String autoName = panel.getUserName();
                     panel.getCheckBoxEnabled().setSelected(config.enabled());
                     panel.getTextAreaAuthHeaders().setText(config.authHeaders());
                     panel.getTextAreaParamReplacement().setText(config.paramReplacement());
+                    // 如果用户在对话框中输入了不同的名称，执行重命名以同步到所有面板
+                    if (!autoName.equals(config.name())) {
+                        userPanel.renameUser(autoName, config.name());
+                    }
                     newName[0] = config.name();
                     LogUtils.INSTANCE.info("Created new user via dialog: " + config.name());
                 };

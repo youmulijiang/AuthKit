@@ -121,6 +121,21 @@ public class UserPanel extends JPanel {
     }
 
     /**
+     * 公开的重命名方法：根据旧名称查找面板并执行重命名
+     *
+     * @param oldName 旧名称
+     * @param newName 新名称
+     */
+    public void renameUser(String oldName, String newName) {
+        AuthUserConfigPanel configPanel = userPanels.get(oldName);
+        if (configPanel == null || oldName.equals(newName)) {
+            return;
+        }
+        configPanel.getTextFieldName().setText(newName);
+        renameUser(oldName, newName, configPanel);
+    }
+
+    /**
      * 重命名鉴权用户：更新 map key、Tab 标题、CloseableTabHeader，触发回调
      */
     private void renameUser(String oldName, String newName, AuthUserConfigPanel configPanel) {
