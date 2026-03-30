@@ -1,0 +1,63 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java-version: [17, 21]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java-version }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java-version }}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build with Maven (Java ${{ matrix.java-version }})
+        run: |
+          mvn clean package -DskipTests \
+            -Dmaven.compiler.source=${{ matrix.java-version }} \
+            -Dmaven.compiler.target=${{ matrix.java-version }}
+
+      - name: Rename JAR
+        run: |
+          JAR_FILE=$(find target -name "AuthKit-*.jar" -not -name "*-sources*" -not -name "*-javadoc*" | head -1)
+          cp "$JAR_FILE" "target/AuthKit-java${{ matrix.java-version }}.jar"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AuthKit-java${{ matrix.java-version }}
+          path: target/AuthKit-java${{ matrix.java-version }}.jar
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            artifacts/AuthKit-java17/AuthKit-java17.jar
+            artifacts/AuthKit-java21/AuthKit-java21.jar
