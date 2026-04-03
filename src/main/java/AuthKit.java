@@ -494,27 +494,39 @@ public class AuthKit implements BurpExtension {
                 }
 
                 comparePanel.showProgress();
+                boolean sideBySide = comparePanel.isSideBySideMode();
                 diffExecutor.submit(() -> {
                     String diffBody = "";
+                    DiffService.SideBySideDiffResult sideBySideResult = null;
                     Exception error = null;
                     try {
-                        diffBody = diffService.diff(context.sourceText(), context.targetText());
+                        if (sideBySide) {
+                            sideBySideResult = diffService.diffSideBySide(
+                                    context.sourceText(), context.targetText());
+                        } else {
+                            diffBody = diffService.diff(context.sourceText(), context.targetText());
+                        }
                     } catch (Exception ex) {
                         error = ex;
                     }
 
                     String finalDiffBody = diffBody;
+                    DiffService.SideBySideDiffResult finalSideBySideResult = sideBySideResult;
                     Exception finalError = error;
                     SwingUtilities.invokeLater(() -> {
                         try {
                             if (context.version() == requestVersion.get()) {
-                                if (finalError == null) {
+                                if (finalError != null) {
+                                    comparePanel.setDiffContent("<html><body><p>Diff error: "
+                                            + finalError.getMessage() + "</p></body></html>");
+                                } else if (sideBySide && finalSideBySideResult != null) {
+                                    String wrapL = buildSideBySideHtml(finalSideBySideResult.leftHtml());
+                                    String wrapR = buildSideBySideHtml(finalSideBySideResult.rightHtml());
+                                    comparePanel.setDiffContentSideBySide(wrapL, wrapR);
+                                } else {
                                     comparePanel.setDiffContent(buildDiffHtml(
                                             context.sourceName(), context.targetName(),
                                             context.tabType(), finalDiffBody));
-                                } else {
-                                    comparePanel.setDiffContent("<html><body><p>Diff error: "
-                                            + finalError.getMessage() + "</p></body></html>");
                                 }
                             }
                         } finally {
@@ -597,6 +609,14 @@ public class AuthKit implements BurpExtension {
         } else {
             html.append(diffBody);
         }
+        html.append("</body></html>");
+        return html.toString();
+    }
+
+    private String buildSideBySideHtml(String bodyHtml) {
+        StringBuilder html = new StringBuilder();
+        html.append("<html><body style='font-family:Courier New;font-size:10pt;'>");
+        html.append(bodyHtml);
         html.append("</body></html>");
         return html.toString();
     }

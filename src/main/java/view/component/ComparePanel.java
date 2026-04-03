@@ -32,13 +32,29 @@ public class ComparePanel extends JPanel {
     private final JTabbedPane tabbedSource;
     /** 被选择区：外层 TabbedPane，选项卡 = 鉴权对象 */
     private final JTabbedPane tabbedTarget;
-    /** Diff 差异展示区（HTML 渲染） */
+    /** Diff 差异展示区 — 统一视图（HTML 渲染） */
     private final JEditorPane editorPaneDiff;
+    /** Diff 差异展示区 — 并排视图左侧 */
+    private final JEditorPane editorPaneDiffLeft;
+    /** Diff 差异展示区 — 并排视图右侧 */
+    private final JEditorPane editorPaneDiffRight;
     /** Diff 进度条 */
     private final JProgressBar progressBar;
     private final JLabel labelTarget;
     private final JLabel labelSource;
     private final JLabel labelDiff;
+
+    /** 当前 Diff 视图模式：true = 并排双面板，false = 统一视图 */
+    private boolean sideBySideMode = false;
+    /** 统一视图容器 */
+    private JScrollPane scrollUnifiedDiff;
+    /** 并排视图容器 */
+    private JSplitPane splitSideBySide;
+    /** Diff 内容区域使用 CardLayout 切换 */
+    private JPanel cardDiffContent;
+    private CardLayout cardLayout;
+    private static final String CARD_UNIFIED = "unified";
+    private static final String CARD_SIDE_BY_SIDE = "sideBySide";
 
     /** 选择区中每个鉴权对象名称 -> MessagePanel 的映射 */
     private final Map<String, MessagePanel> sourcePanels;
@@ -71,6 +87,10 @@ public class ComparePanel extends JPanel {
         this.tabbedSource = builder.tabbedSource;
         this.tabbedTarget = builder.tabbedTarget;
         this.editorPaneDiff = builder.editorPaneDiff;
+        this.editorPaneDiffLeft = new JEditorPane("text/html", "");
+        this.editorPaneDiffLeft.setEditable(false);
+        this.editorPaneDiffRight = new JEditorPane("text/html", "");
+        this.editorPaneDiffRight.setEditable(false);
         this.progressBar = new JProgressBar();
         this.progressBar.setIndeterminate(true);
         this.progressBar.setStringPainted(true);
@@ -83,6 +103,7 @@ public class ComparePanel extends JPanel {
         this.targetPanels = builder.targetPanels;
         initLayout();
         initTabSync();
+        initDiffContextMenu();
         I18n.getInstance().addLanguageChangeListener(this::refreshTexts);
         refreshTexts();
     }
@@ -115,9 +136,52 @@ public class ComparePanel extends JPanel {
         panelDiffHeader.add(progressBar, BorderLayout.CENTER);
         panelDiffHeader.add(btnExpandDiff, BorderLayout.EAST);
 
+        // 统一视图
+        scrollUnifiedDiff = new JScrollPane(editorPaneDiff);
+
+        // 并排视图
+        JScrollPane scrollLeft = new JScrollPane(editorPaneDiffLeft);
+        JScrollPane scrollRight = new JScrollPane(editorPaneDiffRight);
+        // 同步滚动（使用标志位防止循环触发）
+        boolean[] syncing = {false};
+        scrollLeft.getVerticalScrollBar().addAdjustmentListener(e -> {
+            if (syncing[0]) return;
+            syncing[0] = true;
+            scrollRight.getVerticalScrollBar().setValue(e.getValue());
+            syncing[0] = false;
+        });
+        scrollRight.getVerticalScrollBar().addAdjustmentListener(e -> {
+            if (syncing[0]) return;
+            syncing[0] = true;
+            scrollLeft.getVerticalScrollBar().setValue(e.getValue());
+            syncing[0] = false;
+        });
+        // 同步水平滚动
+        boolean[] syncingH = {false};
+        scrollLeft.getHorizontalScrollBar().addAdjustmentListener(e -> {
+            if (syncingH[0]) return;
+            syncingH[0] = true;
+            scrollRight.getHorizontalScrollBar().setValue(e.getValue());
+            syncingH[0] = false;
+        });
+        scrollRight.getHorizontalScrollBar().addAdjustmentListener(e -> {
+            if (syncingH[0]) return;
+            syncingH[0] = true;
+            scrollLeft.getHorizontalScrollBar().setValue(e.getValue());
+            syncingH[0] = false;
+        });
+        splitSideBySide = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, scrollLeft, scrollRight);
+        splitSideBySide.setResizeWeight(0.5);
+
+        // CardLayout 切换
+        cardLayout = new CardLayout();
+        cardDiffContent = new JPanel(cardLayout);
+        cardDiffContent.add(scrollUnifiedDiff, CARD_UNIFIED);
+        cardDiffContent.add(splitSideBySide, CARD_SIDE_BY_SIDE);
+
         panelDiff = new JPanel(new BorderLayout());
         panelDiff.add(panelDiffHeader, BorderLayout.NORTH);
-        panelDiff.add(new JScrollPane(editorPaneDiff), BorderLayout.CENTER);
+        panelDiff.add(cardDiffContent, BorderLayout.CENTER);
 
         splitBottom = new JSplitPane(JSplitPane.VERTICAL_SPLIT, panelSource, panelDiff);
         splitBottom.setResizeWeight(0.5);
@@ -166,6 +230,46 @@ public class ComparePanel extends JPanel {
         splitMain.setBottomComponent(splitBottom);
         splitMain.setResizeWeight(0.33);
         add(splitMain, BorderLayout.CENTER);
+    }
+
+    /** 初始化 Diff 区域的右键菜单，用于切换统一视图和并排视图 */
+    private void initDiffContextMenu() {
+        JPopupMenu popupMenu = new JPopupMenu();
+
+        JMenuItem itemUnified = new JMenuItem(
+                I18n.getInstance().text("compare", "menu.viewUnified"));
+        JMenuItem itemSideBySide = new JMenuItem(
+                I18n.getInstance().text("compare", "menu.viewSideBySide"));
+
+        itemUnified.addActionListener(e -> switchDiffView(false));
+        itemSideBySide.addActionListener(e -> switchDiffView(true));
+
+        popupMenu.add(itemUnified);
+        popupMenu.add(itemSideBySide);
+
+        // 注册语言切换刷新
+        I18n.getInstance().addLanguageChangeListener(() -> {
+            I18n i18n = I18n.getInstance();
+            itemUnified.setText(i18n.text("compare", "menu.viewUnified"));
+            itemSideBySide.setText(i18n.text("compare", "menu.viewSideBySide"));
+        });
+
+        // 给所有 diff 相关组件注册右键菜单
+        editorPaneDiff.setComponentPopupMenu(popupMenu);
+        editorPaneDiffLeft.setComponentPopupMenu(popupMenu);
+        editorPaneDiffRight.setComponentPopupMenu(popupMenu);
+        cardDiffContent.setComponentPopupMenu(popupMenu);
+    }
+
+    /** 切换 Diff 视图模式 */
+    private void switchDiffView(boolean sideBySide) {
+        if (this.sideBySideMode == sideBySide) {
+            return;
+        }
+        this.sideBySideMode = sideBySide;
+        cardLayout.show(cardDiffContent, sideBySide ? CARD_SIDE_BY_SIDE : CARD_UNIFIED);
+        // 触发重新 diff 以填充对应面板
+        triggerAutoDiff();
     }
 
     /**
@@ -327,10 +431,23 @@ public class ComparePanel extends JPanel {
         return Map.copyOf(targetPanels);
     }
 
-    /** 设置 Diff 展示内容（HTML 格式） */
+    /** 设置 Diff 展示内容（HTML 格式）— 统一视图 */
     public void setDiffContent(String diffHtml) {
         editorPaneDiff.setText(diffHtml);
         editorPaneDiff.setCaretPosition(0);
+    }
+
+    /** 设置 Diff 展示内容 — 并排视图（左 Source / 右 Target） */
+    public void setDiffContentSideBySide(String leftHtml, String rightHtml) {
+        editorPaneDiffLeft.setText(leftHtml);
+        editorPaneDiffLeft.setCaretPosition(0);
+        editorPaneDiffRight.setText(rightHtml);
+        editorPaneDiffRight.setCaretPosition(0);
+    }
+
+    /** 当前是否为并排双面板模式 */
+    public boolean isSideBySideMode() {
+        return sideBySideMode;
     }
 
     /** 清空所有区域内容 */
@@ -339,6 +456,8 @@ public class ComparePanel extends JPanel {
         targetPanels.values().forEach(MessagePanel::clearContent);
         hideProgress();
         editorPaneDiff.setText("");
+        editorPaneDiffLeft.setText("");
+        editorPaneDiffRight.setText("");
     }
 
     /**
