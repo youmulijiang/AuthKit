@@ -42,6 +42,9 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
     /** 获取插件是否启用 */
     private final Supplier<Boolean> enabledSupplier;
 
+    /** 开启插件的回调（用于弹窗中勾选后直接启用） */
+    private final Runnable enablePluginHandler;
+
     /** Send 处理回调：(选中的请求响应列表) */
     private final Consumer<List<HttpRequestResponse>> sendHandler;
 
@@ -53,11 +56,13 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
 
     public AuthContextMenuProvider(Supplier<List<String>> userNamesSupplier,
                                     Supplier<Boolean> enabledSupplier,
+                                    Runnable enablePluginHandler,
                                     Consumer<List<HttpRequestResponse>> sendHandler,
                                     BiConsumer<String, String> extractHandler,
                                     Function<String, String> createUserHandler) {
         this.userNamesSupplier = userNamesSupplier;
         this.enabledSupplier = enabledSupplier;
+        this.enablePluginHandler = enablePluginHandler;
         this.sendHandler = sendHandler;
         this.extractHandler = extractHandler;
         this.createUserHandler = createUserHandler;
@@ -101,10 +106,25 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
         JMenuItem item = new JMenuItem(I18n.getInstance().text("auth_context_menu", "menu.send"));
         item.addActionListener(e -> {
             if (!enabledSupplier.get()) {
-                JOptionPane.showMessageDialog(null,
-                        I18n.getInstance().text("auth_context_menu", "dialog.pluginDisabled.message"),
-                        I18n.getInstance().text("auth_context_menu", "dialog.pluginDisabled.title"),
+                I18n i18n = I18n.getInstance();
+                // 构建带勾选框的自定义面板
+                JLabel msgLabel = new JLabel(i18n.text("auth_context_menu", "dialog.pluginDisabled.message"));
+                JCheckBox enableCheckBox = new JCheckBox(
+                        i18n.text("auth_context_menu", "dialog.pluginDisabled.checkbox"));
+                JPanel panel = new JPanel(new BorderLayout(0, 8));
+                panel.add(msgLabel, BorderLayout.NORTH);
+                panel.add(enableCheckBox, BorderLayout.CENTER);
+
+                int result = JOptionPane.showConfirmDialog(
+                        null, panel,
+                        i18n.text("auth_context_menu", "dialog.pluginDisabled.title"),
+                        JOptionPane.OK_CANCEL_OPTION,
                         JOptionPane.WARNING_MESSAGE);
+
+                if (result == JOptionPane.OK_OPTION && enableCheckBox.isSelected()) {
+                    enablePluginHandler.run();
+                    sendHandler.accept(selectedItems);
+                }
                 return;
             }
             sendHandler.accept(selectedItems);
