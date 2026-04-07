@@ -43,6 +43,9 @@ public class AuthKit implements BurpExtension {
     private ExecutorService executor;
     private ExecutorService diffExecutor;
 
+    /** 缓存当前已展示在 ComparePanel 中的 sample ID，避免重复点击同一行时重复加载 */
+    private int lastCompareSampleId = -1;
+
     @Override
     public void initialize(MontoyaApi montoyaApi) {
         // 初始化全局 API 访问点
@@ -90,6 +93,7 @@ public class AuthKit implements BurpExtension {
             mainPanel.getPanelDataTable().clearAll();
             mainPanel.getPanelMetadataTable().clearAll();
             mainPanel.getPanelCompare().clearAll();
+            lastCompareSampleId = -1;
         });
 
         // 绑定展示指标下拉框切换 → 刷新 DataTable 中鉴权对象列的数据
@@ -158,7 +162,7 @@ public class AuthKit implements BurpExtension {
                 "[   Pwn The Planet, One HTTP at a Time  ]\n" +
                         "[#] Author: youmulijiang\n" +
                         "[#] Github: https://github.com/youmulijiang\n" +
-                        "[#] Version: 1.4.0\n"
+                        "[#] Version: 1.5.2\n"
         ));
     }
 
@@ -444,6 +448,12 @@ public class AuthKit implements BurpExtension {
      * 更新 ComparePanel（使用 Montoya 原始对象设置编辑器内容）
      */
     private void updateComparePanel(ComparePanel comparePanel, CompareSampleModel sample) {
+        // 缓存命中：同一条记录重复点击时跳过，避免重复设置编辑器内容和触发 diff
+        if (sample.getId() == lastCompareSampleId) {
+            return;
+        }
+        lastCompareSampleId = sample.getId();
+
         Map<String, MessagePanel> sourcePanels = comparePanel.getSourcePanels();
         Map<String, MessagePanel> targetPanels = comparePanel.getTargetPanels();
 

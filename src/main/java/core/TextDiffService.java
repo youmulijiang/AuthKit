@@ -203,7 +203,13 @@ public class TextDiffService implements DiffService {
     }
 
     /**
-     * 并排比较两段文本的差异，返回左右两侧 HTML 片段
+
+
+
+
+
+     * 并排比较两段文本的差异，返回左右两侧 HTML 片段。
+     * 对大文本自动启用上下文模式，只渲染差异附近的行。
      */
     @Override
     public SideBySideDiffResult diffSideBySide(String original, String modified) {
@@ -213,68 +219,178 @@ public class TextDiffService implements DiffService {
         Patch<String> patch = DiffUtils.diff(originalLines, modifiedLines);
 
         if (patch.getDeltas().isEmpty()) {
-            // 无差异：左右都显示原始文本
             String html = buildPlainHtml(originalLines);
             return new SideBySideDiffResult(html, html, false);
         }
 
+        int totalLines = originalLines.size() + modifiedLines.size();
+        int totalChars = safeLength(original) + safeLength(modified);
+        boolean summaryMode = totalLines > LARGE_TEXT_LINE_THRESHOLD || totalChars > LARGE_TEXT_CHAR_THRESHOLD;
+        boolean contextMode = summaryMode || totalLines > FULL_RENDER_LINE_THRESHOLD;
+
+        if (contextMode) {
+            return buildContextSideBySide(originalLines, patch, summaryMode);
+        } else {
+            return buildFullSideBySide(originalLines, patch);
+        }
+    }
+
+    /** 并排视图 — 完整渲染（小文本） */
+    private SideBySideDiffResult buildFullSideBySide(List<String> originalLines, Patch<String> patch) {
+        DiffStats stats = calculateStats(patch);
         StringBuilder leftHtml = new StringBuilder();
         StringBuilder rightHtml = new StringBuilder();
-        leftHtml.append("<p style='font-family:Courier New;font-size:13pt;'>");
-        rightHtml.append("<p style='font-family:Courier New;font-size:13pt;'>");
+        appendSideBySideStatsHeader(leftHtml, rightHtml, stats);
+        appendSideBySideBodyOpen(leftHtml, rightHtml);
 
         int origPos = 0;
         for (AbstractDelta<String> delta : patch.getDeltas()) {
             Chunk<String> src = delta.getSource();
             Chunk<String> tgt = delta.getTarget();
 
-            // 相同行（delta 之前的内容）
             for (int i = origPos; i < src.getPosition(); i++) {
-                String escaped = escapeHtml(originalLines.get(i));
-                leftHtml.append(escaped).append("<br>");
-                rightHtml.append(escaped).append("<br>");
+                appendSameLineBoth(leftHtml, rightHtml, originalLines.get(i));
             }
-
-            // 删除行（左侧红色高亮，右侧补空行）
-            for (String line : src.getLines()) {
-                leftHtml.append("<span style='background-color:")
-                        .append(COLOR_DELETE_BG).append(";color:#000000;'>")
-                        .append(escapeHtml(line)).append("</span><br>");
-            }
-
-            // 插入行（右侧绿色高亮，左侧补空行）
-            for (String line : tgt.getLines()) {
-                rightHtml.append("<span style='background-color:")
-                        .append(COLOR_INSERT_BG).append(";color:#000000;'>")
-                        .append(escapeHtml(line)).append("</span><br>");
-            }
-
-            // 补齐空行使左右对齐
-            int diff = src.size() - tgt.size();
-            if (diff > 0) {
-                for (int i = 0; i < diff; i++) {
-                    rightHtml.append("<span style='background-color:#eeeeee;'>&nbsp;</span><br>");
-                }
-            } else if (diff < 0) {
-                for (int i = 0; i < -diff; i++) {
-                    leftHtml.append("<span style='background-color:#eeeeee;'>&nbsp;</span><br>");
-                }
-            }
-
+            appendDeltaSideBySide(leftHtml, rightHtml, src, tgt);
             origPos = src.getPosition() + src.size();
         }
 
-        // 剩余相同行
         for (int i = origPos; i < originalLines.size(); i++) {
-            String escaped = escapeHtml(originalLines.get(i));
-            leftHtml.append(escaped).append("<br>");
-            rightHtml.append(escaped).append("<br>");
+            appendSameLineBoth(leftHtml, rightHtml, originalLines.get(i));
         }
 
-        leftHtml.append("</p>");
-        rightHtml.append("</p>");
-
+        appendSideBySideBodyClose(leftHtml, rightHtml);
         return new SideBySideDiffResult(leftHtml.toString(), rightHtml.toString(), true);
+    }
+
+    /** 并排视图 — 上下文渲染（大文本，只显示差异附近的行） */
+    private SideBySideDiffResult buildContextSideBySide(List<String> originalLines,
+                                                         Patch<String> patch, boolean summaryMode) {
+        DiffStats stats = calculateStats(patch);
+        StringBuilder leftHtml = new StringBuilder();
+        StringBuilder rightHtml = new StringBuilder();
+        appendSideBySideStatsHeader(leftHtml, rightHtml, stats);
+        if (summaryMode) {
+            String hint = "<span style='color:#666666;'>Large diff detected. Rendering a summarized view for responsiveness.</span><br><br>";
+            leftHtml.append(hint);
+            rightHtml.append(hint);
+        }
+        appendSideBySideBodyOpen(leftHtml, rightHtml);
+
+        int maxRenderLines = summaryMode ? MAX_SUMMARY_RENDER_LINES : MAX_CONTEXT_RENDER_LINES;
+        int renderedLines = 0;
+        int renderedUntil = 0;
+
+        for (AbstractDelta<String> delta : patch.getDeltas()) {
+            Chunk<String> src = delta.getSource();
+            Chunk<String> tgt = delta.getTarget();
+
+            int contextStart = Math.max(renderedUntil, src.getPosition() - CONTEXT_LINES);
+            if (contextStart > renderedUntil) {
+                appendOmittedLinesBoth(leftHtml, rightHtml, contextStart - renderedUntil);
+                renderedLines++;
+            }
+
+            for (int i = contextStart; i < src.getPosition(); i++) {
+                appendSameLineBoth(leftHtml, rightHtml, originalLines.get(i));
+                renderedLines++;
+                if (renderedLines >= maxRenderLines) {
+                    return finishTruncatedSideBySide(leftHtml, rightHtml);
+                }
+            }
+
+            appendDeltaSideBySide(leftHtml, rightHtml, src, tgt);
+            renderedLines += Math.max(src.size(), tgt.size());
+            if (renderedLines >= maxRenderLines) {
+                return finishTruncatedSideBySide(leftHtml, rightHtml);
+            }
+
+            int afterStart = src.getPosition() + src.size();
+            int afterEnd = Math.min(originalLines.size(), afterStart + CONTEXT_LINES);
+            for (int i = Math.max(afterStart, renderedUntil); i < afterEnd; i++) {
+                appendSameLineBoth(leftHtml, rightHtml, originalLines.get(i));
+                renderedLines++;
+                if (renderedLines >= maxRenderLines) {
+                    return finishTruncatedSideBySide(leftHtml, rightHtml);
+                }
+            }
+
+            renderedUntil = Math.max(renderedUntil, afterEnd);
+        }
+
+        if (renderedUntil < originalLines.size()) {
+            appendOmittedLinesBoth(leftHtml, rightHtml, originalLines.size() - renderedUntil);
+        }
+
+        appendSideBySideBodyClose(leftHtml, rightHtml);
+        return new SideBySideDiffResult(leftHtml.toString(), rightHtml.toString(), true);
+    }
+
+    // ── 并排视图辅助方法 ──
+
+    private void appendSideBySideStatsHeader(StringBuilder left, StringBuilder right, DiffStats stats) {
+        String statsHtml = "<span style='background-color:" + COLOR_INSERT_BG
+                + ";color:#000000;'>Inserts: " + stats.inserts() + "</span>"
+                + "&nbsp;&nbsp;&nbsp;"
+                + "<span style='background-color:" + COLOR_DELETE_BG
+                + ";color:#000000;'>Deletes: " + stats.deletes() + "</span><br><br>";
+        left.append(statsHtml);
+        right.append(statsHtml);
+    }
+
+    private void appendSideBySideBodyOpen(StringBuilder left, StringBuilder right) {
+        String open = "<p style='font-family:Courier New;font-size:13pt;'>";
+        left.append(open);
+        right.append(open);
+    }
+
+    private void appendSideBySideBodyClose(StringBuilder left, StringBuilder right) {
+        left.append("</p>");
+        right.append("</p>");
+    }
+
+    private void appendSameLineBoth(StringBuilder left, StringBuilder right, String line) {
+        String escaped = escapeHtml(line);
+        left.append(escaped).append("<br>");
+        right.append(escaped).append("<br>");
+    }
+
+    private void appendOmittedLinesBoth(StringBuilder left, StringBuilder right, int count) {
+        if (count <= 0) return;
+        String omitted = "<span style='color:#666666;'>... " + count + " unchanged lines omitted ...</span><br>";
+        left.append(omitted);
+        right.append(omitted);
+    }
+
+    private void appendDeltaSideBySide(StringBuilder left, StringBuilder right,
+                                        Chunk<String> src, Chunk<String> tgt) {
+        for (String line : src.getLines()) {
+            left.append("<span style='background-color:")
+                    .append(COLOR_DELETE_BG).append(";color:#000000;'>")
+                    .append(escapeHtml(line)).append("</span><br>");
+        }
+        for (String line : tgt.getLines()) {
+            right.append("<span style='background-color:")
+                    .append(COLOR_INSERT_BG).append(";color:#000000;'>")
+                    .append(escapeHtml(line)).append("</span><br>");
+        }
+        int diff = src.size() - tgt.size();
+        if (diff > 0) {
+            for (int i = 0; i < diff; i++) {
+                right.append("<span style='background-color:#eeeeee;'>&nbsp;</span><br>");
+            }
+        } else if (diff < 0) {
+            for (int i = 0; i < -diff; i++) {
+                left.append("<span style='background-color:#eeeeee;'>&nbsp;</span><br>");
+            }
+        }
+    }
+
+    private SideBySideDiffResult finishTruncatedSideBySide(StringBuilder left, StringBuilder right) {
+        String truncated = "<span style='color:#666666;'>... diff output truncated ...</span><br></p>";
+        left.append(truncated);
+        right.append(truncated);
+        return new SideBySideDiffResult(left.toString(), right.toString(), true);
     }
 
     private String buildPlainHtml(List<String> lines) {
