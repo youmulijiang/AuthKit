@@ -227,6 +227,14 @@ public class DataTablePanel extends JPanel {
                         }
                         return false;
 
+                    case ToolbarPanel.FILTER_HOST:
+                        // 通过数据提供器搜索请求 Host 头
+                        if (dataProvider != null) {
+                            String hostText = dataProvider.apply(modelRow);
+                            return hostText != null && hostText.toLowerCase().contains(lowerKeyword);
+                        }
+                        return false;
+
                     case ToolbarPanel.FILTER_REQUEST_CONTENT:
                     case ToolbarPanel.FILTER_RESPONSE_CONTENT:
                         // 通过数据提供器搜索报文内容

@@ -14,13 +14,14 @@ import java.awt.event.FocusEvent;
 public class ToolbarPanel extends JPanel {
 
     public static final String FILTER_ALL = "ALL";
+    public static final String FILTER_HOST = "HOST";
     public static final String FILTER_LENGTH = "LENGTH";
     public static final String FILTER_HASH = "HASH";
     public static final String FILTER_REQUEST_CONTENT = "REQUEST_CONTENT";
     public static final String FILTER_RESPONSE_CONTENT = "RESPONSE_CONTENT";
 
     private static final String[] FILTER_OPTION_KEYS = {
-            FILTER_ALL, FILTER_LENGTH, FILTER_HASH,
+            FILTER_ALL, FILTER_HOST, FILTER_LENGTH, FILTER_HASH,
             FILTER_REQUEST_CONTENT, FILTER_RESPONSE_CONTENT
     };
 
@@ -138,6 +139,7 @@ public class ToolbarPanel extends JPanel {
 
     private String getFilterLabel(String key) {
         return switch (key) {
+            case FILTER_HOST -> I18n.getInstance().text("toolbar", "filter.host");
             case FILTER_LENGTH -> I18n.getInstance().text("toolbar", "filter.length");
             case FILTER_HASH -> I18n.getInstance().text("toolbar", "filter.hash");
             case FILTER_REQUEST_CONTENT -> I18n.getInstance().text("toolbar", "filter.requestContent");

@@ -185,6 +185,12 @@ public class AuthKit implements BurpExtension {
                 MessageDataModel data = sample.getMessageData(authName);
                 if (data == null) continue;
                 switch (filterType) {
+                    case ToolbarPanel.FILTER_HOST:
+                        if (data.getRequest() != null) {
+                            String host = extractHost(data.getRequest());
+                            if (host != null) sb.append(host).append(" ");
+                        }
+                        break;
                     case ToolbarPanel.FILTER_REQUEST_CONTENT:
                         if (data.getRequest() != null) sb.append(data.getRequest()).append(" ");
                         break;
@@ -775,5 +781,23 @@ public class AuthKit implements BurpExtension {
 
         // 更新 UI
         SwingUtilities.invokeLater(() -> refreshDataTable(mainPanel, controller));
+    }
+
+    /**
+     * 从 HTTP 请求报文中提取 Host 头的值
+     *
+     * @param requestText 原始 HTTP 请求报文文本
+     * @return Host 头的值，未找到返回 null
+     */
+    private static String extractHost(String requestText) {
+        if (requestText == null || requestText.isEmpty()) {
+            return null;
+        }
+        for (String line : requestText.split("\r?\n")) {
+            if (line.toLowerCase().startsWith("host:")) {
+                return line.substring(5).trim();
+            }
+        }
+        return null;
     }
 }
