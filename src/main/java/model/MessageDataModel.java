@@ -22,6 +22,8 @@ public class MessageDataModel {
     private String note;
     /** 鉴权风险评分 0~100 */
     private int rank;
+    /** 响应 Content-Type */
+    private String contentType;
 
     /** Montoya 原始请求对象（供编辑器使用） */
     private HttpRequest httpRequest;
@@ -128,6 +130,16 @@ public class MessageDataModel {
     /** 设置鉴权风险评分 */
     public void setRank(int rank) {
         this.rank = rank;
+    }
+
+    /** 获取响应 Content-Type */
+    public String getContentType() {
+        return contentType;
+    }
+
+    /** 设置响应 Content-Type */
+    public void setContentType(String contentType) {
+        this.contentType = contentType;
     }
 
     /** 获取 Montoya 原始请求对象 */

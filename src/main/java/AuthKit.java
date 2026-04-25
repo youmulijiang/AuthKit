@@ -128,6 +128,8 @@ public class AuthKit implements BurpExtension {
                             core.HashService.hash(response.bodyToString()),
                             request, response
                     );
+                    originalData.setContentType(response.headerValue("Content-Type") != null
+                            ? response.headerValue("Content-Type") : "");
 
                     // 从 UserPanel 收集启用的用户配置
                     List<AuthUserModel> users = collectUsers(mainPanel.getPanelUser());
@@ -430,7 +432,7 @@ public class AuthKit implements BurpExtension {
         row[1] = sample.getMethod();
         row[2] = sample.getUrl();
         for (int i = 0; i < authColumns.size(); i++) {
-            row[3 + i] = sample.getValueByAuthName(authColumns.get(i), metric);
+            row[3 + i] = sample.getDisplayValueByAuthName(authColumns.get(i), metric);
         }
         return row;
     }
@@ -445,7 +447,7 @@ public class AuthKit implements BurpExtension {
                 metadataTable.updateRow(authName, data.getStatusCode(),
                         data.getLength(), data.getHash(),
                         data.getAttributeCount(), data.getNote(),
-                        data.getRank());
+                        data.getRank(), data.getContentType());
             }
         }
     }
@@ -770,6 +772,8 @@ public class AuthKit implements BurpExtension {
                 core.HashService.hash(response.bodyToString()),
                 request, response
         );
+        originalData.setContentType(response.headerValue("Content-Type") != null
+                ? response.headerValue("Content-Type") : "");
 
         // 收集所有鉴权用户
         List<AuthUserModel> users = collectUsers(mainPanel.getPanelUser());

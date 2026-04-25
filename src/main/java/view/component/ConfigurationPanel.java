@@ -22,9 +22,12 @@ public class ConfigurationPanel extends JPanel {
     public static final String METRIC_HASH = "Hash";
     public static final String METRIC_ATTRIBUTE_NUM = "AttributeNum";
     public static final String METRIC_RANK = "Rank";
+    public static final String METRIC_NOTE = "Note";
+    public static final String METRIC_CONTENT_TYPE = "ContentType";
 
     private static final String[] DISPLAY_METRIC_KEYS = {
-            METRIC_LENGTH, METRIC_STATUS_CODE, METRIC_HASH, METRIC_ATTRIBUTE_NUM, METRIC_RANK
+            METRIC_LENGTH, METRIC_STATUS_CODE, METRIC_HASH, METRIC_ATTRIBUTE_NUM, METRIC_RANK,
+            METRIC_NOTE, METRIC_CONTENT_TYPE
     };
 
     /** 禁用时文本框的背景色 */
@@ -329,6 +332,8 @@ public class ConfigurationPanel extends JPanel {
             case METRIC_HASH -> I18n.getInstance().text("configuration", "metric.hash");
             case METRIC_ATTRIBUTE_NUM -> I18n.getInstance().text("configuration", "metric.attributeNum");
             case METRIC_RANK -> I18n.getInstance().text("configuration", "metric.rank");
+            case METRIC_NOTE -> I18n.getInstance().text("configuration", "metric.note");
+            case METRIC_CONTENT_TYPE -> I18n.getInstance().text("configuration", "metric.contentType");
             default -> I18n.getInstance().text("configuration", "metric.length");
         };
     }

@@ -92,9 +92,13 @@ public class RequestReplayService {
             note = requestResponse.annotations().notes();
         }
 
+        // 从响应头获取 Content-Type
+        String contentType = response.headerValue("Content-Type");
+
         MessageDataModel model = new MessageDataModel(requestStr, responseStr, statusCode, length, hash, request, response);
         model.setAttributeCount(attributeCount);
         model.setNote(note);
+        model.setContentType(contentType != null ? contentType : "");
         return model;
     }
 }

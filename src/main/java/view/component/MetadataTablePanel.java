@@ -87,7 +87,7 @@ public class MetadataTablePanel extends JPanel {
     private void rebuildRows() {
         tableModel.setRowCount(0);
         for (String name : authRows) {
-            tableModel.addRow(new Object[]{I18n.getInstance().translateAuthObjectName(name), "", "", "", "", "", ""});
+            tableModel.addRow(new Object[]{I18n.getInstance().translateAuthObjectName(name), "", "", "", "", "", "", ""});
         }
     }
 
@@ -110,6 +110,7 @@ public class MetadataTablePanel extends JPanel {
         columns.add(I18n.getInstance().text("metadata_table", "column.hash"));
         columns.add(I18n.getInstance().text("metadata_table", "column.attributeNum"));
         columns.add(I18n.getInstance().text("metadata_table", "column.note"));
+        columns.add(I18n.getInstance().text("metadata_table", "column.contentType"));
         columns.add(I18n.getInstance().text("metadata_table", "column.rank"));
         return columns;
     }
@@ -124,9 +125,10 @@ public class MetadataTablePanel extends JPanel {
      * @param attributeCount 响应 attributes 个数
      * @param note           annotations notes 内容
      * @param rank           鉴权风险评分 0~100
+     * @param contentType    响应 Content-Type
      */
     public void updateRow(String name, int statusCode, int length, int hash,
-                          int attributeCount, String note, int rank) {
+                          int attributeCount, String note, int rank, String contentType) {
         int rowIndex = authRows.indexOf(name);
         if (rowIndex < 0) {
             return;
@@ -136,7 +138,8 @@ public class MetadataTablePanel extends JPanel {
         tableModel.setValueAt(hash, rowIndex, 3);
         tableModel.setValueAt(attributeCount, rowIndex, 4);
         tableModel.setValueAt(note != null ? note : "", rowIndex, 5);
-        tableModel.setValueAt(rank, rowIndex, 6);
+        tableModel.setValueAt(contentType != null ? contentType : "", rowIndex, 6);
+        tableModel.setValueAt(rank, rowIndex, 7);
     }
 
     /** 获取元数据表格 */

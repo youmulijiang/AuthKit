@@ -128,5 +128,31 @@ public class CompareSampleModel {
             default -> data.getLength();
         };
     }
+
+    /**
+     * 根据指定指标获取鉴权对象的展示值（支持字符串类型指标）
+     *
+     * @param authName 鉴权对象名称
+     * @param metric   指标名称
+     * @return 对应指标的展示值，无数据返回空字符串或 0
+     */
+    public Object getDisplayValueByAuthName(String authName, String metric) {
+        MessageDataModel data = messageDataMap.get(authName);
+        if (data == null) {
+            return switch (metric) {
+                case "Note", "ContentType" -> "";
+                default -> 0;
+            };
+        }
+        return switch (metric) {
+            case "Status Code" -> data.getStatusCode();
+            case "Hash" -> data.getHash();
+            case "AttributeNum" -> data.getAttributeCount();
+            case "Rank" -> data.getRank();
+            case "Note" -> data.getNote() != null ? data.getNote() : "";
+            case "ContentType" -> data.getContentType() != null ? data.getContentType() : "";
+            default -> data.getLength();
+        };
+    }
 }
 
