@@ -37,6 +37,14 @@ public class DataTablePanel extends JPanel {
     /** 数据提供器：根据行索引（model index）返回对应的可搜索文本 */
     private Function<Integer, String> dataProvider;
 
+    /** 是否仅显示越权的行 */
+    private boolean unauthorizedOnly;
+
+    /** 当前筛选类型 */
+    private String currentFilterType;
+    /** 当前筛选关键字 */
+    private String currentKeyword;
+
     private DataTablePanel(Builder builder) {
         this.tableModel = builder.tableModel;
         this.tableData = builder.tableData;
@@ -181,27 +189,55 @@ public class DataTablePanel extends JPanel {
     }
 
     /**
+     * 设置是否仅显示越权的行
+     *
+     * @param unauthorizedOnly true 表示仅显示存在越权（鉴权对象列与 Original 相同）的行
+     */
+    public void setUnauthorizedOnly(boolean unauthorizedOnly) {
+        this.unauthorizedOnly = unauthorizedOnly;
+        updateRowFilter();
+    }
+
+    /**
      * 应用筛选
      *
-     * @param filterType 筛选类型（All / Length / Hash / Request Content / Response Content）
+     * @param filterType 筛选类型（All / Length / Hash / Host / Request Content / Response Content）
      * @param keyword    筛选关键字
      */
     public void applyFilter(String filterType, String keyword) {
-        if (keyword == null || keyword.trim().isEmpty()) {
+        this.currentFilterType = filterType;
+        this.currentKeyword = keyword;
+        updateRowFilter();
+    }
+
+    /** 统一更新 RowFilter，组合关键字过滤和差异过滤 */
+    private void updateRowFilter() {
+        boolean hasKeyword = currentKeyword != null && !currentKeyword.trim().isEmpty();
+
+        if (!hasKeyword && !unauthorizedOnly) {
             rowSorter.setRowFilter(null);
             return;
         }
 
-        String lowerKeyword = keyword.trim().toLowerCase();
+        String lowerKeyword = hasKeyword ? currentKeyword.trim().toLowerCase() : null;
+        String filterType = currentFilterType;
 
         rowSorter.setRowFilter(new RowFilter<DefaultTableModel, Integer>() {
             @Override
             public boolean include(Entry<? extends DefaultTableModel, ? extends Integer> entry) {
-                int modelRow = entry.getIdentifier();
+                // 越权过滤：检查是否存在与 Original 相同的鉴权对象列（即越权）
+                if (unauthorizedOnly && !hasAnyUnauthorized(entry)) {
+                    return false;
+                }
 
+                // 关键字过滤
+                if (lowerKeyword == null) {
+                    return true;
+                }
+
+                int modelRow = entry.getIdentifier();
                 switch (filterType) {
                     case ToolbarPanel.FILTER_ALL:
-                        // 搜索所有可见列 + 数据提供器的文本
                         for (int i = 0; i < entry.getValueCount(); i++) {
                             String cellValue = String.valueOf(entry.getValue(i));
                             if (cellValue.toLowerCase().contains(lowerKeyword)) {
@@ -218,7 +254,6 @@ public class DataTablePanel extends JPanel {
 
                     case ToolbarPanel.FILTER_LENGTH:
                     case ToolbarPanel.FILTER_HASH:
-                        // 搜索鉴权对象列中的数值
                         for (int i = FIXED_COLUMN_COUNT; i < entry.getValueCount(); i++) {
                             String cellValue = String.valueOf(entry.getValue(i));
                             if (cellValue.toLowerCase().contains(lowerKeyword)) {
@@ -228,7 +263,6 @@ public class DataTablePanel extends JPanel {
                         return false;
 
                     case ToolbarPanel.FILTER_HOST:
-                        // 通过数据提供器搜索请求 Host 头
                         if (dataProvider != null) {
                             String hostText = dataProvider.apply(modelRow);
                             return hostText != null && hostText.toLowerCase().contains(lowerKeyword);
@@ -237,7 +271,6 @@ public class DataTablePanel extends JPanel {
 
                     case ToolbarPanel.FILTER_REQUEST_CONTENT:
                     case ToolbarPanel.FILTER_RESPONSE_CONTENT:
-                        // 通过数据提供器搜索报文内容
                         if (dataProvider != null) {
                             String text = dataProvider.apply(modelRow);
                             return text != null && text.toLowerCase().contains(lowerKeyword);
@@ -247,6 +280,21 @@ public class DataTablePanel extends JPanel {
                     default:
                         return true;
                 }
+            }
+
+            /** 检查该行是否存在越权：任一鉴权对象列的值与 Original 相同即为越权 */
+            private boolean hasAnyUnauthorized(Entry<? extends DefaultTableModel, ? extends Integer> entry) {
+                if (entry.getValueCount() <= FIXED_COLUMN_COUNT + 1) {
+                    return false;
+                }
+                Object originalValue = entry.getValue(FIXED_COLUMN_COUNT);
+                for (int i = FIXED_COLUMN_COUNT + 1; i < entry.getValueCount(); i++) {
+                    Object cellValue = entry.getValue(i);
+                    if (Objects.equals(originalValue, cellValue)) {
+                        return true;
+                    }
+                }
+                return false;
             }
         });
     }

@@ -38,6 +38,7 @@ public class ConfigurationPanel extends JPanel {
     private final JButton btnClearTable;
     private final JComboBox<MetricOption> comboBoxDisplayMetric;
     private final JComboBox<I18n.Language> comboBoxLanguage;
+    private final JCheckBox checkBoxUnauthorizedOnly;
 
     // ===== 域名作用域 =====
     private final JCheckBox checkBoxDomainFilter;
@@ -78,6 +79,7 @@ public class ConfigurationPanel extends JPanel {
         this.btnClearTable = builder.btnClearTable;
         this.comboBoxDisplayMetric = builder.comboBoxDisplayMetric;
         this.comboBoxLanguage = builder.comboBoxLanguage;
+        this.checkBoxUnauthorizedOnly = builder.checkBoxUnauthorizedOnly;
         this.checkBoxDomainFilter = builder.checkBoxDomainFilter;
         this.textAreaDomain = builder.textAreaDomain;
         this.checkBoxScopeProxy = builder.checkBoxScopeProxy;
@@ -185,6 +187,7 @@ public class ConfigurationPanel extends JPanel {
         panel.add(comboBoxDisplayMetric);
         panel.add(labelLanguage);
         panel.add(comboBoxLanguage);
+        panel.add(checkBoxUnauthorizedOnly);
         panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 90));
         return panel;
     }
@@ -289,6 +292,7 @@ public class ConfigurationPanel extends JPanel {
         checkBoxPathFilter.setText(i18n.text("configuration", "checkbox.pathFilter"));
         checkBoxStatusCodeFilter.setText(i18n.text("configuration", "checkbox.statusCodeFilter"));
         checkBoxExtensionFilter.setText(i18n.text("configuration", "checkbox.extensionBlacklist"));
+        checkBoxUnauthorizedOnly.setText(i18n.text("configuration", "checkbox.unauthorizedOnly"));
 
         textAreaDomain.setToolTipText(i18n.text("configuration", "tooltip.domain"));
         textAreaPath.setToolTipText(i18n.text("configuration", "tooltip.path"));
@@ -440,6 +444,11 @@ public class ConfigurationPanel extends JPanel {
         return textAreaAuthHeaders;
     }
 
+    /** 获取仅显示越权行开关 */
+    public JCheckBox getCheckBoxUnauthorizedOnly() {
+        return checkBoxUnauthorizedOnly;
+    }
+
     /**
      * 配置面板建造器
      */
@@ -464,6 +473,7 @@ public class ConfigurationPanel extends JPanel {
         private final JCheckBox checkBoxExtensionFilter;
         private final JTextField textFieldExtensionBlacklist;
         private final JTextArea textAreaAuthHeaders;
+        private final JCheckBox checkBoxUnauthorizedOnly;
 
         public Builder() {
             Font monoFont = new Font("Monospaced", Font.PLAIN, 12);
@@ -497,6 +507,8 @@ public class ConfigurationPanel extends JPanel {
 
             this.textAreaAuthHeaders = new JTextArea("Cookie\nAuthorization\nToken");
             this.textAreaAuthHeaders.setFont(monoFont);
+
+            this.checkBoxUnauthorizedOnly = new JCheckBox("", false);
         }
 
         /** 构建配置面板 */

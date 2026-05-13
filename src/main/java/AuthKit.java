@@ -100,6 +100,11 @@ public class AuthKit implements BurpExtension {
         mainPanel.getPanelConfiguration().getComboBoxDisplayMetric().addActionListener(
                 e -> refreshDataTable(mainPanel, controller));
 
+        // 绑定仅显示越权行勾选框
+        mainPanel.getPanelConfiguration().getCheckBoxUnauthorizedOnly().addActionListener(e ->
+                mainPanel.getPanelDataTable().setUnauthorizedOnly(
+                        mainPanel.getPanelConfiguration().getCheckBoxUnauthorizedOnly().isSelected()));
+
         // 绑定筛选功能
         bindFilter(mainPanel, controller);
 
@@ -419,6 +424,10 @@ public class AuthKit implements BurpExtension {
                 }
             }
         }
+
+        // 数据更新后重新应用越权过滤，确保基于最新指标值生效
+        boolean unauthorizedOnly = mainPanel.getPanelConfiguration().getCheckBoxUnauthorizedOnly().isSelected();
+        dataTable.setUnauthorizedOnly(unauthorizedOnly);
     }
 
     /**
