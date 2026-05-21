@@ -39,6 +39,7 @@ public class AuthKit implements BurpExtension {
 
     private static final int AUTO_DIFF_DEBOUNCE_MS = 180;
     private static final int DATA_TABLE_FIXED_COLUMN_COUNT = 3;
+    private static final AtomicBoolean WELCOME_BANNER_PRINTED = new AtomicBoolean(false);
 
     private ExecutorService executor;
     private ExecutorService diffExecutor;
@@ -117,6 +118,9 @@ public class AuthKit implements BurpExtension {
         // 注册右键菜单
         registerContextMenu(montoyaApi, mainPanel, controller, configModel, replayService);
 
+        // 注册 JWT 编辑器 Provider（在 Burp 请求编辑器中添加 JWT 选项卡）
+        montoyaApi.userInterface().registerHttpRequestEditorProvider(new JwtRequestEditorProvider(montoyaApi));
+
         // 创建并注册 HttpRequestHandler
         HttpRequestHandler httpHandler = new HttpRequestHandler(configModel, (request, response) -> {
             // 去重检查：相同 method + url 的请求只处理一次
@@ -165,6 +169,9 @@ public class AuthKit implements BurpExtension {
     }
 
     private void printWelcomeBanner() {
+        if (!WELCOME_BANNER_PRINTED.compareAndSet(false, true)) {
+            return;
+        }
         ApiUtils.INSTANCE.api().logging().logToOutput(String.format(
                 "[   Pwn The Planet, One HTTP at a Time  ]\n" +
                         "[#] Author: youmulijiang\n" +
