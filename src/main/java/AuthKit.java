@@ -176,7 +176,7 @@ public class AuthKit implements BurpExtension {
                 "[   Pwn The Planet, One HTTP at a Time  ]\n" +
                         "[#] Author: youmulijiang\n" +
                         "[#] Github: https://github.com/youmulijiang\n" +
-                        "[#] Version: 1.5.2\n"
+                        "[#] Version: 1.6.0\n"
         ));
     }
 
