@@ -32,6 +32,12 @@ jobs:
             -Dmaven.compiler.source=${{ matrix.java-version }} \
             -Dmaven.compiler.target=${{ matrix.java-version }}
 
+      - name: Verify packaged dependencies
+        run: |
+          JAR_FILE=$(find target -name "AuthKit-*.jar" -not -name "*-sources*" -not -name "*-javadoc*" | head -1)
+          test -n "$JAR_FILE"
+          jar tf "$JAR_FILE" | grep -q "com/auth0/jwt/algorithms/Algorithm.class"
+
       - name: Rename JAR
         run: |
           JAR_FILE=$(find target -name "AuthKit-*.jar" -not -name "*-sources*" -not -name "*-javadoc*" | head -1)
