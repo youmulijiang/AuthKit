@@ -6,6 +6,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.text.MessageFormat;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
@@ -106,9 +107,21 @@ public final class I18n {
             }
             Properties properties = new Properties();
             properties.load(new InputStreamReader(input, StandardCharsets.UTF_8));
+            normalizeBomKeys(properties);
             return properties;
         } catch (IOException ex) {
             throw new IllegalStateException("Failed to load i18n resource: " + resourcePath, ex);
+        }
+    }
+
+    /** 清理 UTF-8 BOM 导致的首个 key 无法匹配问题。 */
+    private void normalizeBomKeys(Properties properties) {
+        for (String key : new ArrayList<>(properties.stringPropertyNames())) {
+            if (key.startsWith("\uFEFF")) {
+                String value = properties.getProperty(key);
+                properties.remove(key);
+                properties.setProperty(key.substring(1), value);
+            }
         }
     }
 

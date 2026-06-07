@@ -1,6 +1,7 @@
 import burp.api.montoya.BurpExtension;
 import burp.api.montoya.MontoyaApi;
 import controller.AuthController;
+import core.AuthResultExportService;
 import core.DiffService;
 import core.HttpRequestHandler;
 import core.RequestReplayService;
@@ -22,8 +23,13 @@ import view.component.*;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
+import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -81,6 +87,7 @@ public class AuthKit implements BurpExtension {
         RequestReplayService replayService = new RequestReplayService(
                 montoyaApi.http(), processorChain);
         TextDiffService diffService = new TextDiffService();
+        AuthResultExportService exportService = new AuthResultExportService();
 
         // 创建控制器
         AuthController controller = new AuthController(configModel, replayService, diffService);
@@ -111,6 +118,9 @@ public class AuthKit implements BurpExtension {
 
         // 绑定 DataTable 行选中事件 → 更新 MetadataTable + ComparePanel
         bindTableSelection(mainPanel, controller);
+
+        // 绑定 DataTable 多选右键动作 → 导出 / 复制 URL
+        bindDataTableSelectionActions(mainPanel, controller, exportService);
 
         // 绑定自动 Diff 事件（懒加载，tab 切换时自动触发）
         bindAutoDiff(mainPanel.getPanelCompare(), diffService);
@@ -352,6 +362,111 @@ public class AuthKit implements BurpExtension {
                         table.columnAtPoint(e.getPoint()));
             }
         });
+    }
+
+    /** 绑定 DataTable 多选右键动作。 */
+    private void bindDataTableSelectionActions(MainPanel mainPanel, AuthController controller,
+                                               AuthResultExportService exportService) {
+        DataTablePanel dataTable = mainPanel.getPanelDataTable();
+        dataTable.setSelectionActionHandler(new DataTablePanel.SelectionActionHandler() {
+            @Override
+            public void exportCsv(List<Integer> modelRows) {
+                exportSelectedRows(mainPanel, controller, exportService, modelRows, ExportFormat.CSV);
+            }
+
+            @Override
+            public void exportHtml(List<Integer> modelRows) {
+                exportSelectedRows(mainPanel, controller, exportService, modelRows, ExportFormat.HTML);
+            }
+
+            @Override
+            public void copyUrls(List<Integer> modelRows) {
+                copySelectedUrls(mainPanel, controller, modelRows);
+            }
+        });
+    }
+
+    private void exportSelectedRows(MainPanel mainPanel, AuthController controller,
+                                    AuthResultExportService exportService,
+                                    List<Integer> modelRows, ExportFormat format) {
+        List<CompareSampleModel> samples = collectSelectedSamples(controller, modelRows);
+        if (samples.isEmpty()) {
+            showDataTableMessage(mainPanel, "message.noSelection", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        I18n i18n = I18n.getInstance();
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle(i18n.text("data_table", format.dialogTitleKey));
+        chooser.setSelectedFile(new File("authkit-export." + format.extension));
+        if (chooser.showSaveDialog(mainPanel) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+
+        Path path = ensureExtension(chooser.getSelectedFile(), format.extension);
+        String content = format == ExportFormat.CSV
+                ? exportService.toCsv(samples, mainPanel.getPanelDataTable().getAuthColumns())
+                : exportService.toHtml(samples, mainPanel.getPanelDataTable().getAuthColumns());
+        try {
+            exportService.write(path, content);
+            JOptionPane.showMessageDialog(mainPanel,
+                    i18n.format("data_table", "message.exportSuccess", path),
+                    i18n.text("data_table", "title.export"), JOptionPane.INFORMATION_MESSAGE);
+        } catch (IOException ex) {
+            LogUtils.INSTANCE.error("Failed to export selected AuthKit results", ex);
+            JOptionPane.showMessageDialog(mainPanel,
+                    i18n.format("data_table", "message.exportFailed", ex.getMessage()),
+                    i18n.text("data_table", "title.export"), JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void copySelectedUrls(MainPanel mainPanel, AuthController controller, List<Integer> modelRows) {
+        List<CompareSampleModel> samples = collectSelectedSamples(controller, modelRows);
+        if (samples.isEmpty()) {
+            showDataTableMessage(mainPanel, "message.noSelection", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        StringBuilder urls = new StringBuilder();
+        for (CompareSampleModel sample : samples) {
+            if (sample.getUrl() != null && !sample.getUrl().isBlank()) {
+                if (!urls.isEmpty()) {
+                    urls.append(System.lineSeparator());
+                }
+                urls.append(sample.getUrl());
+            }
+        }
+        if (urls.isEmpty()) {
+            showDataTableMessage(mainPanel, "message.noUrl", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        Toolkit.getDefaultToolkit().getSystemClipboard()
+                .setContents(new StringSelection(urls.toString()), null);
+        showDataTableMessage(mainPanel, "message.copySuccess", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private List<CompareSampleModel> collectSelectedSamples(AuthController controller, List<Integer> modelRows) {
+        List<CompareSampleModel> samples = new ArrayList<>();
+        for (Integer modelRow : modelRows) {
+            CompareSampleModel sample = modelRow != null ? controller.getSample(modelRow) : null;
+            if (sample != null) {
+                samples.add(sample);
+            }
+        }
+        return samples;
+    }
+
+    private Path ensureExtension(File selectedFile, String extension) {
+        String path = selectedFile.getPath();
+        if (!path.toLowerCase().endsWith("." + extension)) {
+            path = path + "." + extension;
+        }
+        return Path.of(path);
+    }
+
+    private void showDataTableMessage(MainPanel mainPanel, String key, int messageType) {
+        JOptionPane.showMessageDialog(mainPanel,
+                I18n.getInstance().text("data_table", key),
+                I18n.getInstance().text("data_table", "title.selection"), messageType);
     }
 
     /** 更新当前选中样本对应的 Metadata 和 Compare 区域 */
@@ -657,6 +772,19 @@ public class AuthKit implements BurpExtension {
 
     private record DiffContext(int version, String sourceName, String targetName,
                                String tabType, String sourceText, String targetText) {
+    }
+
+    private enum ExportFormat {
+        CSV("csv", "dialog.exportCsv.title"),
+        HTML("html", "dialog.exportHtml.title");
+
+        private final String extension;
+        private final String dialogTitleKey;
+
+        ExportFormat(String extension, String dialogTitleKey) {
+            this.extension = extension;
+            this.dialogTitleKey = dialogTitleKey;
+        }
     }
 
     /**

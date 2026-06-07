@@ -7,6 +7,8 @@ import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableRowSorter;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -30,9 +32,16 @@ public class DataTablePanel extends JPanel {
     private final JTable tableData;
     private final DefaultTableModel tableModel;
     private final TableRowSorter<DefaultTableModel> rowSorter;
+    private final JPopupMenu selectionPopupMenu;
+    private final JMenuItem itemExportCsv;
+    private final JMenuItem itemExportHtml;
+    private final JMenuItem itemCopyUrls;
 
     /** 当前所有鉴权对象列名（有序） */
     private final List<String> authColumns;
+
+    /** 选中行右键动作处理器，由协调层注入。 */
+    private SelectionActionHandler selectionActionHandler;
 
     /** 数据提供器：根据行索引（model index）返回对应的可搜索文本 */
     private Function<Integer, String> dataProvider;
@@ -49,11 +58,20 @@ public class DataTablePanel extends JPanel {
         this.tableModel = builder.tableModel;
         this.tableData = builder.tableData;
         this.authColumns = builder.authColumns;
+        this.selectionPopupMenu = new JPopupMenu();
+        this.itemExportCsv = new JMenuItem();
+        this.itemExportHtml = new JMenuItem();
+        this.itemCopyUrls = new JMenuItem();
         this.rowSorter = new TableRowSorter<>(tableModel);
         this.tableData.setRowSorter(rowSorter);
         initLayout();
-        I18n.getInstance().addLanguageChangeListener(this::rebuildColumns);
+        initSelectionPopupMenu();
+        I18n.getInstance().addLanguageChangeListener(() -> {
+            rebuildColumns();
+            refreshContextMenuTexts();
+        });
         rebuildColumns();
+        refreshContextMenuTexts();
     }
 
     /** 初始化布局 */
@@ -61,6 +79,65 @@ public class DataTablePanel extends JPanel {
         setLayout(new BorderLayout());
         JScrollPane scrollPane = new JScrollPane(tableData);
         add(scrollPane, BorderLayout.CENTER);
+    }
+
+    /** 初始化选中行右键菜单。 */
+    private void initSelectionPopupMenu() {
+        itemExportCsv.addActionListener(e -> triggerSelectionAction(SelectionAction.EXPORT_CSV));
+        itemExportHtml.addActionListener(e -> triggerSelectionAction(SelectionAction.EXPORT_HTML));
+        itemCopyUrls.addActionListener(e -> triggerSelectionAction(SelectionAction.COPY_URLS));
+        selectionPopupMenu.add(itemExportCsv);
+        selectionPopupMenu.add(itemExportHtml);
+        selectionPopupMenu.addSeparator();
+        selectionPopupMenu.add(itemCopyUrls);
+
+        tableData.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                showSelectionPopupIfNeeded(e);
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                showSelectionPopupIfNeeded(e);
+            }
+        });
+    }
+
+    private void showSelectionPopupIfNeeded(MouseEvent e) {
+        if (!e.isPopupTrigger()) {
+            return;
+        }
+        int viewRow = tableData.rowAtPoint(e.getPoint());
+        if (viewRow < 0) {
+            return;
+        }
+        if (!tableData.isRowSelected(viewRow)) {
+            tableData.getSelectionModel().setSelectionInterval(viewRow, viewRow);
+        }
+        selectionPopupMenu.show(e.getComponent(), e.getX(), e.getY());
+    }
+
+    private void refreshContextMenuTexts() {
+        I18n i18n = I18n.getInstance();
+        itemExportCsv.setText(i18n.text("data_table", "menu.exportCsv"));
+        itemExportHtml.setText(i18n.text("data_table", "menu.exportHtml"));
+        itemCopyUrls.setText(i18n.text("data_table", "menu.copyUrls"));
+    }
+
+    private void triggerSelectionAction(SelectionAction action) {
+        if (selectionActionHandler == null) {
+            return;
+        }
+        List<Integer> modelRows = getSelectedRows();
+        if (modelRows.isEmpty()) {
+            return;
+        }
+        switch (action) {
+            case EXPORT_CSV -> selectionActionHandler.exportCsv(modelRows);
+            case EXPORT_HTML -> selectionActionHandler.exportHtml(modelRows);
+            case COPY_URLS -> selectionActionHandler.copyUrls(modelRows);
+        }
     }
 
     /**
@@ -177,6 +254,21 @@ public class DataTablePanel extends JPanel {
             return -1;
         }
         return tableData.convertRowIndexToModel(viewRow);
+    }
+
+    /** 获取所有选中行的索引（返回 model 索引，按当前视图顺序）。 */
+    public List<Integer> getSelectedRows() {
+        int[] viewRows = tableData.getSelectedRows();
+        List<Integer> modelRows = new ArrayList<>(viewRows.length);
+        for (int viewRow : viewRows) {
+            modelRows.add(tableData.convertRowIndexToModel(viewRow));
+        }
+        return modelRows;
+    }
+
+    /** 设置选中行右键动作处理器。 */
+    public void setSelectionActionHandler(SelectionActionHandler handler) {
+        this.selectionActionHandler = handler;
     }
 
     /**
@@ -327,7 +419,9 @@ public class DataTablePanel extends JPanel {
                 }
             };
             this.tableData = new JTable(this.tableModel);
-            this.tableData.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+            this.tableData.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+            this.tableData.setRowSelectionAllowed(true);
+            this.tableData.setColumnSelectionAllowed(false);
             this.tableData.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
 
             // 自定义 CellRenderer：鉴权对象列值与 Original 不同时染浅红色
@@ -338,6 +432,20 @@ public class DataTablePanel extends JPanel {
         public DataTablePanel build() {
             return new DataTablePanel(this);
         }
+    }
+
+    private enum SelectionAction {
+        EXPORT_CSV,
+        EXPORT_HTML,
+        COPY_URLS
+    }
+
+    public interface SelectionActionHandler {
+        void exportCsv(List<Integer> modelRows);
+
+        void exportHtml(List<Integer> modelRows);
+
+        void copyUrls(List<Integer> modelRows);
     }
 
     /**
