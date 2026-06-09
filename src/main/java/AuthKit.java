@@ -3,6 +3,9 @@ import burp.api.montoya.MontoyaApi;
 import controller.AuthController;
 import core.AuthResultExportService;
 import core.DiffService;
+import core.FakeIpIntruderHttpHandler;
+import core.FakeIpPayloadGeneratorProvider;
+import core.FakeIpService;
 import core.HttpRequestHandler;
 import core.RequestReplayService;
 import core.TextDiffService;
@@ -88,6 +91,7 @@ public class AuthKit implements BurpExtension {
                 montoyaApi.http(), processorChain);
         TextDiffService diffService = new TextDiffService();
         AuthResultExportService exportService = new AuthResultExportService();
+        FakeIpService fakeIpService = new FakeIpService();
 
         // 创建控制器
         AuthController controller = new AuthController(configModel, replayService, diffService);
@@ -126,7 +130,13 @@ public class AuthKit implements BurpExtension {
         bindAutoDiff(mainPanel.getPanelCompare(), diffService);
 
         // 注册右键菜单
-        registerContextMenu(montoyaApi, mainPanel, controller, configModel, replayService);
+        registerContextMenu(montoyaApi, mainPanel, controller, configModel, replayService, fakeIpService);
+
+        // 注册 Intruder 随机 IP payload 生成器（fakeIpPayloads）
+        montoyaApi.intruder().registerPayloadGeneratorProvider(
+                new FakeIpPayloadGeneratorProvider(fakeIpService));
+        // 注册 Intruder 请求发送前处理器：每个爆破数据包自动注入随机伪造 IP 头
+        montoyaApi.http().registerHttpHandler(new FakeIpIntruderHttpHandler(fakeIpService));
 
         // 注册 JWT 编辑器 Provider（在 Burp 请求编辑器中添加 JWT 选项卡）
         montoyaApi.userInterface().registerHttpRequestEditorProvider(new JwtRequestEditorProvider(montoyaApi));
@@ -186,7 +196,7 @@ public class AuthKit implements BurpExtension {
                 "[   Pwn The Planet, One HTTP at a Time  ]\n" +
                         "[#] Author: youmulijiang\n" +
                         "[#] Github: https://github.com/youmulijiang\n" +
-                        "[#] Version: 1.7.0\n"
+                        "[#] Version: 1.8.0\n"
         ));
     }
 
@@ -792,7 +802,8 @@ public class AuthKit implements BurpExtension {
      */
     private void registerContextMenu(MontoyaApi montoyaApi, MainPanel mainPanel,
                                       AuthController controller, ConfigModel configModel,
-                                      RequestReplayService replayService) {
+                                      RequestReplayService replayService,
+                                      FakeIpService fakeIpService) {
         // 用户名称提供者：从 UserPanel 获取当前已配置的用户名称
         java.util.function.Supplier<List<String>> userNamesSupplier = () ->
                 new ArrayList<>(mainPanel.getPanelUser().getUserPanels().keySet());
@@ -881,9 +892,15 @@ public class AuthKit implements BurpExtension {
             }
         };
 
+        java.util.function.Consumer<burp.api.montoya.http.message.requests.HttpRequest>
+                sendToRepeaterHandler = request -> montoyaApi.repeater().sendToRepeater(request, "AuthKit Fake IP");
+        java.util.function.Consumer<burp.api.montoya.http.message.requests.HttpRequest>
+                sendToIntruderHandler = request -> montoyaApi.intruder().sendToIntruder(request, "AuthKit Fake IP");
+
         AuthContextMenuProvider contextMenuProvider =
                 new AuthContextMenuProvider(userNamesSupplier, enabledSupplier, enablePluginHandler,
-                        sendHandler, extractHandler, createUserHandler);
+                        sendHandler, extractHandler, createUserHandler, fakeIpService,
+                        sendToRepeaterHandler, sendToIntruderHandler);
         montoyaApi.userInterface().registerContextMenuItemsProvider(contextMenuProvider);
     }
 

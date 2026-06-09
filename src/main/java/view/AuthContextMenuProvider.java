@@ -5,6 +5,8 @@ import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.ui.contextmenu.ContextMenuEvent;
 import burp.api.montoya.ui.contextmenu.ContextMenuItemsProvider;
+import burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse;
+import core.FakeIpService;
 import utils.I18n;
 
 import javax.swing.*;
@@ -12,6 +14,7 @@ import java.awt.*;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -54,18 +57,43 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
     /** 新建用户回调：接收提取到的认证头文本，返回新建用户的名称（null 表示取消） */
     private final Function<String, String> createUserHandler;
 
+    /** 伪造 IP 核心服务 */
+    private final FakeIpService fakeIpService;
+
+    /** 无法直接回写编辑器时，将修改后的请求发送到 Repeater */
+    private final Consumer<HttpRequest> sendToRepeaterHandler;
+
+    /** 随机 IP 爆破：将带伪造 IP 请求头的请求发送到 Intruder */
+    private final Consumer<HttpRequest> sendToIntruderHandler;
+
     public AuthContextMenuProvider(Supplier<List<String>> userNamesSupplier,
                                     Supplier<Boolean> enabledSupplier,
                                     Runnable enablePluginHandler,
                                     Consumer<List<HttpRequestResponse>> sendHandler,
                                     BiConsumer<String, String> extractHandler,
                                     Function<String, String> createUserHandler) {
+        this(userNamesSupplier, enabledSupplier, enablePluginHandler, sendHandler, extractHandler,
+                createUserHandler, new FakeIpService(), request -> {}, request -> {});
+    }
+
+    public AuthContextMenuProvider(Supplier<List<String>> userNamesSupplier,
+                                    Supplier<Boolean> enabledSupplier,
+                                    Runnable enablePluginHandler,
+                                    Consumer<List<HttpRequestResponse>> sendHandler,
+                                    BiConsumer<String, String> extractHandler,
+                                    Function<String, String> createUserHandler,
+                                    FakeIpService fakeIpService,
+                                    Consumer<HttpRequest> sendToRepeaterHandler,
+                                    Consumer<HttpRequest> sendToIntruderHandler) {
         this.userNamesSupplier = userNamesSupplier;
         this.enabledSupplier = enabledSupplier;
         this.enablePluginHandler = enablePluginHandler;
         this.sendHandler = sendHandler;
         this.extractHandler = extractHandler;
         this.createUserHandler = createUserHandler;
+        this.fakeIpService = fakeIpService;
+        this.sendToRepeaterHandler = sendToRepeaterHandler;
+        this.sendToIntruderHandler = sendToIntruderHandler;
     }
 
     @Override
@@ -84,6 +112,9 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
 
         // === Menu 2: Extract Auth to User ===
         menuItems.add(buildExtractMenu(userNames, finalSelectedItems));
+
+        // === Menu 3: Fake IP ===
+        menuItems.add(buildFakeIpMenu(event, finalSelectedItems));
 
         return menuItems;
     }
@@ -170,6 +201,83 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
         menu.add(newUserItem);
 
         return menu;
+    }
+
+    /** 构建 fakeIp 菜单。 */
+    private Component buildFakeIpMenu(ContextMenuEvent event, List<HttpRequestResponse> selectedItems) {
+        I18n i18n = I18n.getInstance();
+        JMenu menu = new JMenu(i18n.text("auth_context_menu", "menu.fakeIp"));
+
+        JMenuItem customIp = new JMenuItem(i18n.text("auth_context_menu", "menu.fakeIp.custom"));
+        customIp.addActionListener(e -> handleCustomFakeIp(event, selectedItems));
+        menu.add(customIp);
+
+        JMenuItem localIp = new JMenuItem(i18n.text("auth_context_menu", "menu.fakeIp.local"));
+        localIp.addActionListener(e -> applyFakeIp(event, selectedItems, fakeIpService::addLocalIpHeaders, false));
+        menu.add(localIp);
+
+        JMenuItem randomIp = new JMenuItem(i18n.text("auth_context_menu", "menu.fakeIp.random"));
+        randomIp.addActionListener(e -> applyFakeIp(event, selectedItems, fakeIpService::addRandomIpHeaders, false));
+        menu.add(randomIp);
+
+        JMenuItem bruteForce = new JMenuItem(i18n.text("auth_context_menu", "menu.fakeIp.bruteforce"));
+        bruteForce.addActionListener(e -> applyFakeIp(event, selectedItems, fakeIpService::addBruteForceHeaders, true));
+        menu.add(bruteForce);
+
+        return menu;
+    }
+
+    private void handleCustomFakeIp(ContextMenuEvent event, List<HttpRequestResponse> selectedItems) {
+        I18n i18n = I18n.getInstance();
+        String ip = JOptionPane.showInputDialog(null,
+                i18n.text("auth_context_menu", "dialog.fakeIp.custom.message"),
+                i18n.text("auth_context_menu", "dialog.fakeIp.custom.title"),
+                JOptionPane.PLAIN_MESSAGE);
+        if (ip == null) {
+            return;
+        }
+        String trimmedIp = ip.trim();
+        if (!fakeIpService.isValidIpv4(trimmedIp)) {
+            JOptionPane.showMessageDialog(null,
+                    i18n.text("auth_context_menu", "dialog.fakeIp.invalid.message"),
+                    i18n.text("auth_context_menu", "dialog.fakeIp.invalid.title"),
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        applyFakeIp(event, selectedItems,
+                request -> fakeIpService.addFakeIpHeaders(request, trimmedIp), false);
+    }
+
+    private void applyFakeIp(ContextMenuEvent event, List<HttpRequestResponse> selectedItems,
+                             Function<HttpRequest, HttpRequest> requestTransformer,
+                             boolean sendToIntruder) {
+        Optional<MessageEditorHttpRequestResponse> editorContext = event.messageEditorRequestResponse();
+        if (editorContext.isPresent()) {
+            HttpRequest request = editorContext.get().requestResponse().request();
+            if (request == null) {
+                return;
+            }
+            HttpRequest updatedRequest = requestTransformer.apply(request);
+            if (sendToIntruder) {
+                sendToIntruderHandler.accept(updatedRequest);
+            } else {
+                editorContext.get().setRequest(updatedRequest);
+            }
+            return;
+        }
+
+        for (HttpRequestResponse item : selectedItems) {
+            HttpRequest request = item.request();
+            if (request == null) {
+                continue;
+            }
+            HttpRequest updatedRequest = requestTransformer.apply(request);
+            if (sendToIntruder) {
+                sendToIntruderHandler.accept(updatedRequest);
+            } else {
+                sendToRepeaterHandler.accept(updatedRequest);
+            }
+        }
     }
 
     /**
