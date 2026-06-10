@@ -2,6 +2,9 @@ import burp.api.montoya.BurpExtension;
 import burp.api.montoya.MontoyaApi;
 import controller.AuthController;
 import core.AuthResultExportService;
+import core.Bypass403PayloadService;
+import core.Bypass403RequestVariant;
+import core.Bypass403ScanResult;
 import core.DiffService;
 import core.FakeIpIntruderHttpHandler;
 import core.FakeIpPayloadGeneratorProvider;
@@ -23,6 +26,7 @@ import utils.LogUtils;
 import view.AuthContextMenuProvider;
 import view.MainPanel;
 import view.component.*;
+import view.dialog.Bypass403ScanDialog;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
@@ -896,12 +900,67 @@ public class AuthKit implements BurpExtension {
                 sendToRepeaterHandler = request -> montoyaApi.repeater().sendToRepeater(request, "AuthKit Fake IP");
         java.util.function.Consumer<burp.api.montoya.http.message.requests.HttpRequest>
                 sendToIntruderHandler = request -> montoyaApi.intruder().sendToIntruder(request, "AuthKit Fake IP");
+        Bypass403PayloadService bypass403PayloadService = new Bypass403PayloadService();
+        java.util.function.Consumer<List<burp.api.montoya.http.message.HttpRequestResponse>>
+                bypass403ScanHandler = selectedItems -> runBypass403Scan(
+                montoyaApi, mainPanel, selectedItems, bypass403PayloadService);
 
         AuthContextMenuProvider contextMenuProvider =
                 new AuthContextMenuProvider(userNamesSupplier, enabledSupplier, enablePluginHandler,
                         sendHandler, extractHandler, createUserHandler, fakeIpService,
-                        sendToRepeaterHandler, sendToIntruderHandler);
+                        sendToRepeaterHandler, sendToIntruderHandler, bypass403ScanHandler);
         montoyaApi.userInterface().registerContextMenuItemsProvider(contextMenuProvider);
+    }
+
+    private void runBypass403Scan(MontoyaApi montoyaApi, JComponent parent,
+                                  List<burp.api.montoya.http.message.HttpRequestResponse> selectedItems,
+                                  Bypass403PayloadService payloadService) {
+        if (selectedItems == null || selectedItems.isEmpty()) {
+            return;
+        }
+        Bypass403ScanDialog dialog = new Bypass403ScanDialog(montoyaApi, parent);
+        AtomicBoolean stopRequested = new AtomicBoolean(false);
+        dialog.setCloseHandler(() -> stopRequested.set(true));
+        dialog.showDialog();
+        executor.submit(() -> {
+            List<Bypass403RequestVariant> variants = new ArrayList<>();
+            for (burp.api.montoya.http.message.HttpRequestResponse item : selectedItems) {
+                if (stopRequested.get()) {
+                    return;
+                }
+                if (item != null && item.request() != null) {
+                    variants.addAll(payloadService.generateVariants(item.request()));
+                }
+            }
+            if (stopRequested.get()) {
+                return;
+            }
+            SwingUtilities.invokeLater(() -> dialog.setTotal(variants.size()));
+            int index = 1;
+            for (Bypass403RequestVariant variant : variants) {
+                if (stopRequested.get()) {
+                    break;
+                }
+                Bypass403ScanResult result;
+                long start = System.currentTimeMillis();
+                try {
+                    burp.api.montoya.http.message.HttpRequestResponse response =
+                            montoyaApi.http().sendRequest(variant.request());
+                    result = Bypass403ScanResult.success(index, variant, response,
+                            System.currentTimeMillis() - start);
+                } catch (Exception ex) {
+                    result = Bypass403ScanResult.failure(index, variant, ex);
+                }
+                Bypass403ScanResult finalResult = result;
+                if (!stopRequested.get()) {
+                    SwingUtilities.invokeLater(() -> dialog.addResult(finalResult));
+                }
+                index++;
+            }
+            if (!stopRequested.get()) {
+                SwingUtilities.invokeLater(dialog::finish);
+            }
+        });
     }
 
     /**

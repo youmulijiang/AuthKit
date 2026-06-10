@@ -66,6 +66,9 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
     /** 随机 IP 爆破：将带伪造 IP 请求头的请求发送到 Intruder */
     private final Consumer<HttpRequest> sendToIntruderHandler;
 
+    /** 403 bypass 扫描回调 */
+    private final Consumer<List<HttpRequestResponse>> bypass403ScanHandler;
+
     public AuthContextMenuProvider(Supplier<List<String>> userNamesSupplier,
                                     Supplier<Boolean> enabledSupplier,
                                     Runnable enablePluginHandler,
@@ -73,7 +76,7 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
                                     BiConsumer<String, String> extractHandler,
                                     Function<String, String> createUserHandler) {
         this(userNamesSupplier, enabledSupplier, enablePluginHandler, sendHandler, extractHandler,
-                createUserHandler, new FakeIpService(), request -> {}, request -> {});
+                createUserHandler, new FakeIpService(), request -> {}, request -> {}, items -> {});
     }
 
     public AuthContextMenuProvider(Supplier<List<String>> userNamesSupplier,
@@ -85,6 +88,20 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
                                     FakeIpService fakeIpService,
                                     Consumer<HttpRequest> sendToRepeaterHandler,
                                     Consumer<HttpRequest> sendToIntruderHandler) {
+        this(userNamesSupplier, enabledSupplier, enablePluginHandler, sendHandler, extractHandler,
+                createUserHandler, fakeIpService, sendToRepeaterHandler, sendToIntruderHandler, items -> {});
+    }
+
+    public AuthContextMenuProvider(Supplier<List<String>> userNamesSupplier,
+                                    Supplier<Boolean> enabledSupplier,
+                                    Runnable enablePluginHandler,
+                                    Consumer<List<HttpRequestResponse>> sendHandler,
+                                    BiConsumer<String, String> extractHandler,
+                                    Function<String, String> createUserHandler,
+                                    FakeIpService fakeIpService,
+                                    Consumer<HttpRequest> sendToRepeaterHandler,
+                                    Consumer<HttpRequest> sendToIntruderHandler,
+                                    Consumer<List<HttpRequestResponse>> bypass403ScanHandler) {
         this.userNamesSupplier = userNamesSupplier;
         this.enabledSupplier = enabledSupplier;
         this.enablePluginHandler = enablePluginHandler;
@@ -94,6 +111,7 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
         this.fakeIpService = fakeIpService;
         this.sendToRepeaterHandler = sendToRepeaterHandler;
         this.sendToIntruderHandler = sendToIntruderHandler;
+        this.bypass403ScanHandler = bypass403ScanHandler;
     }
 
     @Override
@@ -115,6 +133,9 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
 
         // === Menu 3: Fake IP ===
         menuItems.add(buildFakeIpMenu(event, finalSelectedItems));
+
+        // === Menu 4: 403 Bypass Scan ===
+        menuItems.add(buildBypass403ScanMenu(finalSelectedItems));
 
         return menuItems;
     }
@@ -225,6 +246,12 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
         menu.add(bruteForce);
 
         return menu;
+    }
+
+    private Component buildBypass403ScanMenu(List<HttpRequestResponse> selectedItems) {
+        JMenuItem item = new JMenuItem(I18n.getInstance().text("auth_context_menu", "menu.bypass403.scan"));
+        item.addActionListener(e -> bypass403ScanHandler.accept(selectedItems));
+        return item;
     }
 
     private void handleCustomFakeIp(ContextMenuEvent event, List<HttpRequestResponse> selectedItems) {

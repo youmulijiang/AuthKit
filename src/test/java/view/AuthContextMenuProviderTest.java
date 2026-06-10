@@ -123,6 +123,34 @@ class AuthContextMenuProviderTest {
         }
     }
 
+    @Test
+    @DisplayName("403 Bypass Scan 菜单应触发扫描回调")
+    void bypass403Menu_shouldTriggerScanHandler() {
+        I18n i18n = I18n.getInstance();
+        I18n.Language originalLanguage = i18n.getCurrentLanguage();
+        i18n.setLanguage(I18n.Language.ENGLISH);
+        try {
+            HttpRequest request = mock(HttpRequest.class);
+            HttpRequestResponse reqResp = mock(HttpRequestResponse.class);
+            when(reqResp.request()).thenReturn(request);
+            MessageEditorHttpRequestResponse editorContext = mock(MessageEditorHttpRequestResponse.class);
+            when(editorContext.requestResponse()).thenReturn(reqResp);
+            ContextMenuEvent event = mockContextMenuEvent(editorContext);
+            List<HttpRequestResponse> scannedItems = new ArrayList<>();
+            AuthContextMenuProvider provider = new AuthContextMenuProvider(
+                    List::of, () -> true, () -> {}, items -> {}, (auth, user) -> {}, auth -> null,
+                    new FakeIpService(), request1 -> {}, request1 -> {}, scannedItems::addAll);
+
+            JMenuItem bypass403Item = (JMenuItem) provider.provideMenuItems(event).get(3);
+            assertEquals("403 Bypass Scan", bypass403Item.getText());
+            bypass403Item.doClick();
+
+            assertEquals(List.of(reqResp), scannedItems);
+        } finally {
+            i18n.setLanguage(originalLanguage);
+        }
+    }
+
     private HttpRequest mockFakeIpRequest(String expectedIp) {
         HttpRequest request = mock(HttpRequest.class);
         when(request.hasHeader(anyString())).thenReturn(false);
