@@ -70,11 +70,77 @@ class DataTablePanelTest {
         }
     }
 
+    @Test
+    @DisplayName("编号列应按数字排序且选中行仍映射到正确的 model 对象")
+    void idColumn_shouldSortByNumberAndKeepModelMapping() throws Exception {
+        DataTablePanel panel = createPanelWithUnsortedRows();
+        int[] selectedModelRow = {-1};
+
+        SwingUtilities.invokeAndWait(() -> {
+            JTable table = panel.getTableData();
+            table.getRowSorter().toggleSortOrder(0);
+
+            assertEquals(1, table.getValueAt(0, 0));
+            assertEquals(2, table.getValueAt(1, 0));
+            assertEquals(10, table.getValueAt(2, 0));
+            assertEquals(2, table.convertRowIndexToModel(0));
+
+            table.setRowSelectionInterval(0, 0);
+            selectedModelRow[0] = panel.getSelectedRow();
+        });
+
+        assertEquals(2, selectedModelRow[0]);
+    }
+
+    @Test
+    @DisplayName("字符列应按字符串长度排序")
+    void textColumn_shouldSortByTextLength() throws Exception {
+        DataTablePanel panel = createPanelWithUnsortedRows();
+
+        SwingUtilities.invokeAndWait(() -> {
+            JTable table = panel.getTableData();
+            table.getRowSorter().toggleSortOrder(1);
+
+            assertEquals("GET", table.getValueAt(0, 1));
+            assertEquals("POST", table.getValueAt(1, 1));
+            assertEquals("DELETE", table.getValueAt(2, 1));
+        });
+    }
+
+    @Test
+    @DisplayName("同一列表头第三次点击应取消排序并恢复 model 顺序")
+    void headerThirdClick_shouldClearSortKeys() throws Exception {
+        DataTablePanel panel = createPanelWithUnsortedRows();
+
+        SwingUtilities.invokeAndWait(() -> {
+            JTable table = panel.getTableData();
+            RowSorter<?> sorter = table.getRowSorter();
+            sorter.toggleSortOrder(0);
+            sorter.toggleSortOrder(0);
+            sorter.toggleSortOrder(0);
+
+            assertTrue(sorter.getSortKeys().isEmpty());
+            assertEquals(10, table.getValueAt(0, 0));
+            assertEquals(2, table.getValueAt(1, 0));
+            assertEquals(1, table.getValueAt(2, 0));
+        });
+    }
+
     private DataTablePanel createPanelWithRows() throws Exception {
         DataTablePanel panel = new DataTablePanel.Builder().build();
         SwingUtilities.invokeAndWait(() -> {
             panel.addRow(new Object[]{1, "GET", "https://a.test", 100, 403});
             panel.addRow(new Object[]{2, "POST", "https://b.test", 200, 200});
+        });
+        return panel;
+    }
+
+    private DataTablePanel createPanelWithUnsortedRows() throws Exception {
+        DataTablePanel panel = new DataTablePanel.Builder().build();
+        SwingUtilities.invokeAndWait(() -> {
+            panel.addRow(new Object[]{10, "DELETE", "https://ccc.test", 300, 403});
+            panel.addRow(new Object[]{2, "POST", "https://bb.test", 200, 200});
+            panel.addRow(new Object[]{1, "GET", "https://a.test", 100, 403});
         });
         return panel;
     }

@@ -3,16 +3,12 @@ package view.component;
 import utils.I18n;
 
 import javax.swing.*;
-import javax.swing.table.DefaultTableCellRenderer;
-import javax.swing.table.DefaultTableModel;
-import javax.swing.table.TableRowSorter;
+import javax.swing.table.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.util.ArrayList;
+import java.util.*;
 import java.util.List;
-import java.util.Objects;
-import java.util.Vector;
 import java.util.function.Function;
 
 /**
@@ -62,8 +58,9 @@ public class DataTablePanel extends JPanel {
         this.itemExportCsv = new JMenuItem();
         this.itemExportHtml = new JMenuItem();
         this.itemCopyUrls = new JMenuItem();
-        this.rowSorter = new TableRowSorter<>(tableModel);
+        this.rowSorter = new SmartTableRowSorter(tableModel);
         this.tableData.setRowSorter(rowSorter);
+        configureSorter();
         initLayout();
         initSelectionPopupMenu();
         I18n.getInstance().addLanguageChangeListener(() -> {
@@ -72,6 +69,13 @@ public class DataTablePanel extends JPanel {
         });
         rebuildColumns();
         refreshContextMenuTexts();
+    }
+
+    /** 配置排序器：数字列按数值排序，字符串列按长度排序 */
+    private void configureSorter() {
+        for (int i = 0; i < tableModel.getColumnCount(); i++) {
+            rowSorter.setComparator(i, DataTablePanel::compareCellValues);
+        }
     }
 
     /** 初始化布局 */
@@ -200,6 +204,7 @@ public class DataTablePanel extends JPanel {
             }
             tableModel.addRow(newRow);
         }
+        configureSorter();
     }
 
     /** 构建完整列名向量 */
@@ -389,6 +394,71 @@ public class DataTablePanel extends JPanel {
                 return false;
             }
         });
+    }
+
+    /**
+     * 智能比较：数字类型或数字字符串按数值排序；字符类型按长度排序，长度相同再按文本排序保证稳定可预期。
+     */
+    private static int compareCellValues(Object value1, Object value2) {
+        Double number1 = parseNumber(value1);
+        Double number2 = parseNumber(value2);
+        if (number1 != null && number2 != null) {
+            return Double.compare(number1, number2);
+        }
+
+        String text1 = value1 == null ? "" : value1.toString();
+        String text2 = value2 == null ? "" : value2.toString();
+        int lengthCompare = Integer.compare(text1.length(), text2.length());
+        if (lengthCompare != 0) {
+            return lengthCompare;
+        }
+        return String.CASE_INSENSITIVE_ORDER.compare(text1, text2);
+    }
+
+    private static Double parseNumber(Object value) {
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        if (value == null) {
+            return null;
+        }
+        String text = value.toString().trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        try {
+            return Double.parseDouble(text);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    /** 自定义表格排序器：同一列点击按升序 -> 降序 -> 取消排序循环。 */
+    private static class SmartTableRowSorter extends TableRowSorter<DefaultTableModel> {
+
+        SmartTableRowSorter(DefaultTableModel model) {
+            super(model);
+        }
+
+        @Override
+        public void toggleSortOrder(int column) {
+            if (column < 0 || column >= getModel().getColumnCount() || !isSortable(column)) {
+                return;
+            }
+            List<? extends SortKey> currentKeys = getSortKeys();
+            if (!currentKeys.isEmpty()) {
+                SortKey primaryKey = currentKeys.get(0);
+                if (primaryKey.getColumn() == column) {
+                    if (primaryKey.getSortOrder() == SortOrder.ASCENDING) {
+                        setSortKeys(List.of(new SortKey(column, SortOrder.DESCENDING)));
+                    } else {
+                        setSortKeys(List.of());
+                    }
+                    return;
+                }
+            }
+            setSortKeys(List.of(new SortKey(column, SortOrder.ASCENDING)));
+        }
     }
 
     /**
