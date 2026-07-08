@@ -4,7 +4,6 @@ import burp.api.montoya.core.ToolSource;
 import burp.api.montoya.core.ToolType;
 import burp.api.montoya.http.handler.*;
 import burp.api.montoya.http.message.requests.HttpRequest;
-import burp.api.montoya.http.message.responses.HttpResponse;
 import model.ConfigModel;
 import utils.LogUtils;
 
@@ -19,16 +18,16 @@ import java.util.function.BiConsumer;
 public class HttpRequestHandler implements HttpHandler {
 
     private final ConfigModel configModel;
-    private final BiConsumer<HttpRequest, HttpResponse> onRequestCaptured;
+    private final BiConsumer<HttpRequest, HttpResponseReceived> onRequestCaptured;
 
     /**
      * 构造 HTTP 请求处理器
      *
      * @param configModel       插件配置模型
-     * @param onRequestCaptured 请求捕获回调（参数: 原始请求, 原始响应）
+     * @param onRequestCaptured 请求捕获回调（参数: 原始请求, 拦截响应）
      */
     public HttpRequestHandler(ConfigModel configModel,
-                              BiConsumer<HttpRequest, HttpResponse> onRequestCaptured) {
+                              BiConsumer<HttpRequest, HttpResponseReceived> onRequestCaptured) {
         this.configModel = configModel;
         this.onRequestCaptured = onRequestCaptured;
     }

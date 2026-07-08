@@ -1,8 +1,8 @@
 package core;
 
 import burp.api.montoya.core.ToolType;
+import burp.api.montoya.http.handler.HttpResponseReceived;
 import burp.api.montoya.http.message.requests.HttpRequest;
-import burp.api.montoya.http.message.responses.HttpResponse;
 import model.ConfigModel;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -20,7 +20,7 @@ import static org.mockito.Mockito.*;
 class HttpRequestHandlerTest {
 
     private ConfigModel configModel;
-    private BiConsumer<HttpRequest, HttpResponse> callback;
+    private BiConsumer<HttpRequest, HttpResponseReceived> callback;
     private HttpRequestHandler handler;
 
     @BeforeEach

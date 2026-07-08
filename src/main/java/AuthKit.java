@@ -163,6 +163,10 @@ public class AuthKit implements BurpExtension {
                     );
                     originalData.setContentType(response.headerValue("Content-Type") != null
                             ? response.headerValue("Content-Type") : "");
+                    // 从拦截响应的 annotations 读取 Burp 备注
+                    if (response.annotations() != null && response.annotations().hasNotes()) {
+                        originalData.setNote(response.annotations().notes());
+                    }
 
                     // 从 UserPanel 收集启用的用户配置
                     List<AuthUserModel> users = collectUsers(mainPanel.getPanelUser());
@@ -200,7 +204,7 @@ public class AuthKit implements BurpExtension {
                 "[   Pwn The Planet, One HTTP at a Time  ]\n" +
                         "[#] Author: youmulijiang\n" +
                         "[#] Github: https://github.com/youmulijiang\n" +
-                        "[#] Version: 1.8.1\n"
+                        "[#] Version: 1.8.2\n"
         ));
     }
 
@@ -994,6 +998,10 @@ public class AuthKit implements BurpExtension {
         );
         originalData.setContentType(response.headerValue("Content-Type") != null
                 ? response.headerValue("Content-Type") : "");
+        // 从右键菜单选中条目的 annotations 读取 Burp 备注
+        if (reqResp.annotations() != null && reqResp.annotations().hasNotes()) {
+            originalData.setNote(reqResp.annotations().notes());
+        }
 
         // 收集所有鉴权用户
         List<AuthUserModel> users = collectUsers(mainPanel.getPanelUser());
