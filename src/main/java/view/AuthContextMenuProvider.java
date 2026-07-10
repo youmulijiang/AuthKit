@@ -69,6 +69,12 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
     /** 403 bypass 扫描回调 */
     private final Consumer<List<HttpRequestResponse>> bypass403ScanHandler;
 
+    /** 更新为最新鉴权字段回调：(event, selectedItems) */
+    private final BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> updateToLatestAuthHandler;
+
+    /** 从历史选择鉴权字段回调：(event, selectedItems) */
+    private final BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> selectFromHistoryHandler;
+
     public AuthContextMenuProvider(Supplier<List<String>> userNamesSupplier,
                                     Supplier<Boolean> enabledSupplier,
                                     Runnable enablePluginHandler,
@@ -102,6 +108,23 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
                                     Consumer<HttpRequest> sendToRepeaterHandler,
                                     Consumer<HttpRequest> sendToIntruderHandler,
                                     Consumer<List<HttpRequestResponse>> bypass403ScanHandler) {
+        this(userNamesSupplier, enabledSupplier, enablePluginHandler, sendHandler, extractHandler,
+                createUserHandler, fakeIpService, sendToRepeaterHandler, sendToIntruderHandler,
+                bypass403ScanHandler, (event, items) -> {}, (event, items) -> {});
+    }
+
+    public AuthContextMenuProvider(Supplier<List<String>> userNamesSupplier,
+                                    Supplier<Boolean> enabledSupplier,
+                                    Runnable enablePluginHandler,
+                                    Consumer<List<HttpRequestResponse>> sendHandler,
+                                    BiConsumer<String, String> extractHandler,
+                                    Function<String, String> createUserHandler,
+                                    FakeIpService fakeIpService,
+                                    Consumer<HttpRequest> sendToRepeaterHandler,
+                                    Consumer<HttpRequest> sendToIntruderHandler,
+                                    Consumer<List<HttpRequestResponse>> bypass403ScanHandler,
+                                    BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> updateToLatestAuthHandler,
+                                    BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> selectFromHistoryHandler) {
         this.userNamesSupplier = userNamesSupplier;
         this.enabledSupplier = enabledSupplier;
         this.enablePluginHandler = enablePluginHandler;
@@ -112,6 +135,8 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
         this.sendToRepeaterHandler = sendToRepeaterHandler;
         this.sendToIntruderHandler = sendToIntruderHandler;
         this.bypass403ScanHandler = bypass403ScanHandler;
+        this.updateToLatestAuthHandler = updateToLatestAuthHandler;
+        this.selectFromHistoryHandler = selectFromHistoryHandler;
     }
 
     @Override
@@ -136,6 +161,9 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
 
         // === Menu 4: 403 Bypass Scan ===
         menuItems.add(buildBypass403ScanMenu(finalSelectedItems));
+
+        // === Menu 5: 更新鉴权字段 ===
+        menuItems.add(buildUpdateAuthMenu(event, finalSelectedItems));
 
         return menuItems;
     }
@@ -254,6 +282,41 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
         return item;
     }
 
+    /** 构建"更新鉴权字段"父菜单（含两个子菜单）。 */
+    private Component buildUpdateAuthMenu(ContextMenuEvent event, List<HttpRequestResponse> selectedItems) {
+        I18n i18n = I18n.getInstance();
+        JMenu menu = new JMenu(i18n.text("auth_context_menu", "menu.updateAuth"));
+
+        JMenuItem latestItem = new JMenuItem(i18n.text("auth_context_menu", "menu.updateAuth.latest"));
+        latestItem.addActionListener(e -> updateToLatestAuthHandler.accept(event, selectedItems));
+        menu.add(latestItem);
+
+        JMenuItem historyItem = new JMenuItem(i18n.text("auth_context_menu", "menu.updateAuth.history"));
+        historyItem.addActionListener(e -> selectFromHistoryHandler.accept(event, selectedItems));
+        menu.add(historyItem);
+
+        return menu;
+    }
+
+    /**
+     * 将 source 请求中的所有鉴权字段应用到 original 请求上。
+     * 若 original 中已存在同名请求头则替换其值，否则追加。
+     * 非鉴权字段保持不变。
+     *
+     * @param original 原始请求（仅替换其鉴权字段）
+     * @param source   鉴权字段来源请求
+     * @return 替换后的新 HttpRequest 对象
+     */
+    public static HttpRequest replaceAuthHeaders(HttpRequest original, HttpRequest source) {
+        HttpRequest updated = original;
+        for (HttpHeader header : source.headers()) {
+            if (isAuthHeader(header.name())) {
+                updated = updated.withHeader(header.name(), header.value());
+            }
+        }
+        return updated;
+    }
+
     private void handleCustomFakeIp(ContextMenuEvent event, List<HttpRequestResponse> selectedItems) {
         I18n i18n = I18n.getInstance();
         String ip = JOptionPane.showInputDialog(null,
@@ -336,7 +399,7 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
      * @param headerName 请求头名称
      * @return 如果包含任一认证关键字则返回 true
      */
-    static boolean isAuthHeader(String headerName) {
+    public static boolean isAuthHeader(String headerName) {
         if (headerName == null || headerName.isEmpty()) {
             return false;
         }

@@ -26,6 +26,7 @@ import utils.LogUtils;
 import view.AuthContextMenuProvider;
 import view.MainPanel;
 import view.component.*;
+import view.dialog.AuthHistorySelectDialog;
 import view.dialog.Bypass403ScanDialog;
 
 import javax.swing.*;
@@ -38,9 +39,11 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -909,10 +912,21 @@ public class AuthKit implements BurpExtension {
                 bypass403ScanHandler = selectedItems -> runBypass403Scan(
                 montoyaApi, mainPanel, selectedItems, bypass403PayloadService);
 
+        // 更新为最新鉴权字段回调
+        java.util.function.BiConsumer<burp.api.montoya.ui.contextmenu.ContextMenuEvent,
+                List<burp.api.montoya.http.message.HttpRequestResponse>> updateToLatestAuthHandler =
+                (event, items) -> runUpdateToLatestAuth(montoyaApi, event, items);
+
+        // 从历史选择鉴权字段回调
+        java.util.function.BiConsumer<burp.api.montoya.ui.contextmenu.ContextMenuEvent,
+                List<burp.api.montoya.http.message.HttpRequestResponse>> selectFromHistoryHandler =
+                (event, items) -> runSelectAuthFromHistory(montoyaApi, mainPanel, event, items);
+
         AuthContextMenuProvider contextMenuProvider =
                 new AuthContextMenuProvider(userNamesSupplier, enabledSupplier, enablePluginHandler,
                         sendHandler, extractHandler, createUserHandler, fakeIpService,
-                        sendToRepeaterHandler, sendToIntruderHandler, bypass403ScanHandler);
+                        sendToRepeaterHandler, sendToIntruderHandler, bypass403ScanHandler,
+                        updateToLatestAuthHandler, selectFromHistoryHandler);
         montoyaApi.userInterface().registerContextMenuItemsProvider(contextMenuProvider);
     }
 
@@ -965,6 +979,123 @@ public class AuthKit implements BurpExtension {
                 SwingUtilities.invokeLater(dialog::finish);
             }
         });
+    }
+
+    /**
+     * 从代理历史中查找同 host 下最新的含不同鉴权字段的请求，替换原始请求的鉴权字段后输出。
+     * 若触发来源是消息编辑器则直接修改编辑器内容，否则发送到 Repeater。
+     */
+    private void runUpdateToLatestAuth(MontoyaApi api,
+                                        burp.api.montoya.ui.contextmenu.ContextMenuEvent event,
+                                        List<burp.api.montoya.http.message.HttpRequestResponse> items) {
+        if (items == null || items.isEmpty()) return;
+        burp.api.montoya.http.message.requests.HttpRequest originalRequest = items.get(0).request();
+        if (originalRequest == null) return;
+        String host = originalRequest.httpService().host();
+
+        List<burp.api.montoya.proxy.ProxyHttpRequestResponse> history = api.proxy().history();
+        burp.api.montoya.proxy.ProxyHttpRequestResponse latest = null;
+        java.time.ZonedDateTime latestTime = null;
+
+        for (burp.api.montoya.proxy.ProxyHttpRequestResponse item : history) {
+            if (!host.equals(item.host())) continue;
+            boolean hasAuth = false;
+            boolean hasDiff = false;
+            for (burp.api.montoya.http.message.HttpHeader header : item.request().headers()) {
+                if (!AuthContextMenuProvider.isAuthHeader(header.name())) continue;
+                hasAuth = true;
+                String origValue = originalRequest.headerValue(header.name());
+                if (!header.value().equals(origValue)) {
+                    hasDiff = true;
+                }
+            }
+            if (hasAuth && hasDiff) {
+                java.time.ZonedDateTime t = item.time();
+                if (latestTime == null || (t != null && t.isAfter(latestTime))) {
+                    latest = item;
+                    latestTime = t;
+                }
+            }
+        }
+
+        if (latest == null) {
+            JOptionPane.showMessageDialog(null,
+                    I18n.getInstance().text("auth_context_menu", "dialog.authHistory.noLatest"),
+                    I18n.getInstance().text("auth_context_menu", "menu.updateAuth"),
+                    JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        burp.api.montoya.http.message.requests.HttpRequest updated =
+                AuthContextMenuProvider.replaceAuthHeaders(originalRequest, latest.request());
+        Optional<burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse> editorCtx =
+                event.messageEditorRequestResponse();
+        if (editorCtx.isPresent()) {
+            editorCtx.get().setRequest(updated);
+        } else {
+            api.repeater().sendToRepeater(updated, "AuthKit - Updated Auth");
+        }
+    }
+
+    /**
+     * 弹出历史选择对话框，展示同 host 下按鉴权字段去重的代理历史。
+     * 用户选中后将所选请求的鉴权字段替换到原始请求，输出到编辑器或 Repeater。
+     */
+    private void runSelectAuthFromHistory(MontoyaApi api, JComponent parent,
+                                           burp.api.montoya.ui.contextmenu.ContextMenuEvent event,
+                                           List<burp.api.montoya.http.message.HttpRequestResponse> items) {
+        if (items == null || items.isEmpty()) return;
+        burp.api.montoya.http.message.requests.HttpRequest originalRequest = items.get(0).request();
+        if (originalRequest == null) return;
+        String host = originalRequest.httpService().host();
+
+        // 同 host、含鉴权字段的代理历史，按鉴权字段组合去重，同 key 保留最新
+        List<burp.api.montoya.proxy.ProxyHttpRequestResponse> history = api.proxy().history();
+        LinkedHashMap<String, burp.api.montoya.proxy.ProxyHttpRequestResponse> deduped = new LinkedHashMap<>();
+        for (burp.api.montoya.proxy.ProxyHttpRequestResponse item : history) {
+            if (!host.equals(item.host())) continue;
+            String key = buildAuthDeduplicationKey(item.request());
+            if (!key.isEmpty()) {
+                deduped.put(key, item);
+            }
+        }
+
+        if (deduped.isEmpty()) {
+            JOptionPane.showMessageDialog(null,
+                    I18n.getInstance().text("auth_context_menu", "dialog.authHistory.noHistory"),
+                    I18n.getInstance().text("auth_context_menu", "menu.updateAuth"),
+                    JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        List<burp.api.montoya.proxy.ProxyHttpRequestResponse> dedupedList = new ArrayList<>(deduped.values());
+        AuthHistorySelectDialog.show(parent, api, dedupedList, selected -> {
+            burp.api.montoya.http.message.requests.HttpRequest updated =
+                    AuthContextMenuProvider.replaceAuthHeaders(originalRequest, selected.request());
+            Optional<burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse> editorCtx =
+                    event.messageEditorRequestResponse();
+            if (editorCtx.isPresent()) {
+                editorCtx.get().setRequest(updated);
+            } else {
+                api.repeater().sendToRepeater(updated, "AuthKit - Updated Auth");
+            }
+        });
+    }
+
+    /**
+     * 构建代理历史鉴权字段的去重键。
+     * 将请求中所有鉴权字段（名称小写:值）排序后拼接，相同组合视为同一鉴权上下文。
+     */
+    private static String buildAuthDeduplicationKey(
+            burp.api.montoya.http.message.requests.HttpRequest request) {
+        List<String> parts = new ArrayList<>();
+        for (burp.api.montoya.http.message.HttpHeader header : request.headers()) {
+            if (AuthContextMenuProvider.isAuthHeader(header.name())) {
+                parts.add(header.name().toLowerCase() + "=" + header.value());
+            }
+        }
+        parts.sort(String::compareTo);
+        return String.join("|", parts);
     }
 
     /**
