@@ -5,6 +5,9 @@ import core.AuthResultExportService;
 import core.Bypass403PayloadService;
 import core.Bypass403RequestVariant;
 import core.Bypass403ScanResult;
+import core.IdorPayloadService;
+import core.IdorScanResult;
+import core.IdorScanVariant;
 import core.DiffService;
 import core.FakeIpIntruderHttpHandler;
 import core.FakeIpPayloadGeneratorProvider;
@@ -28,6 +31,7 @@ import view.MainPanel;
 import view.component.*;
 import view.dialog.AuthHistorySelectDialog;
 import view.dialog.Bypass403ScanDialog;
+import view.dialog.IdorScanDialog;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
@@ -912,6 +916,11 @@ public class AuthKit implements BurpExtension {
                 bypass403ScanHandler = selectedItems -> runBypass403Scan(
                 montoyaApi, mainPanel, selectedItems, bypass403PayloadService);
 
+        IdorPayloadService idorPayloadService = new IdorPayloadService();
+        java.util.function.Consumer<List<burp.api.montoya.http.message.HttpRequestResponse>>
+                idorScanHandler = selectedItems -> runIdorScan(
+                montoyaApi, mainPanel, selectedItems, idorPayloadService);
+
         // 更新为最新鉴权字段回调
         java.util.function.BiConsumer<burp.api.montoya.ui.contextmenu.ContextMenuEvent,
                 List<burp.api.montoya.http.message.HttpRequestResponse>> updateToLatestAuthHandler =
@@ -922,11 +931,17 @@ public class AuthKit implements BurpExtension {
                 List<burp.api.montoya.http.message.HttpRequestResponse>> selectFromHistoryHandler =
                 (event, items) -> runSelectAuthFromHistory(montoyaApi, mainPanel, event, items);
 
+        // 删除所有鉴权字段回调
+        java.util.function.BiConsumer<burp.api.montoya.ui.contextmenu.ContextMenuEvent,
+                List<burp.api.montoya.http.message.HttpRequestResponse>> deleteAuthHandler =
+                (event, items) -> runDeleteAuthFields(montoyaApi, event, items);
+
         AuthContextMenuProvider contextMenuProvider =
                 new AuthContextMenuProvider(userNamesSupplier, enabledSupplier, enablePluginHandler,
                         sendHandler, extractHandler, createUserHandler, fakeIpService,
                         sendToRepeaterHandler, sendToIntruderHandler, bypass403ScanHandler,
-                        updateToLatestAuthHandler, selectFromHistoryHandler);
+                        updateToLatestAuthHandler, selectFromHistoryHandler, deleteAuthHandler);
+        contextMenuProvider.setIdorScanHandler(idorScanHandler);
         montoyaApi.userInterface().registerContextMenuItemsProvider(contextMenuProvider);
     }
 
@@ -979,6 +994,98 @@ public class AuthKit implements BurpExtension {
                 SwingUtilities.invokeLater(dialog::finish);
             }
         });
+    }
+
+    /**
+     * IDOR 扫描：通过三种策略（删鉴权、数字参数变形、历史参数不同值）检测越权漏洞。
+     * 弹窗上方配置线程数，点击"开始扫描"后并发发包；哈希变化行染浅红。
+     */
+    private void runIdorScan(MontoyaApi montoyaApi, JComponent parent,
+                              List<burp.api.montoya.http.message.HttpRequestResponse> selectedItems,
+                              IdorPayloadService payloadService) {
+        if (selectedItems == null || selectedItems.isEmpty()) return;
+
+        IdorScanDialog dialog = new IdorScanDialog(montoyaApi, parent);
+        AtomicBoolean stopRequested = new AtomicBoolean(false);
+        AtomicReference<ExecutorService> scanPoolRef = new AtomicReference<>();
+
+        dialog.setCloseHandler(() -> {
+            stopRequested.set(true);
+            ExecutorService pool = scanPoolRef.get();
+            if (pool != null) pool.shutdownNow();
+        });
+
+        dialog.setStartHandler(threadCount -> executor.submit(() -> {
+            try {
+                burp.api.montoya.http.message.HttpRequestResponse item = selectedItems.get(0);
+                burp.api.montoya.http.message.requests.HttpRequest baseRequest = item.request();
+                if (baseRequest == null) return;
+
+                // 获取原始响应（如果没有就先发包获取基线）
+                burp.api.montoya.http.message.responses.HttpResponse baseResponse = item.response();
+                if (baseResponse == null) {
+                    burp.api.montoya.http.message.HttpRequestResponse sent =
+                            montoyaApi.http().sendRequest(baseRequest);
+                    baseResponse = sent != null ? sent.response() : null;
+                }
+
+                // 使用 Java hashCode 计算原始响应体哈希
+                String originalBody = baseResponse != null && baseResponse.bodyToString() != null
+                        ? baseResponse.bodyToString() : "";
+                final int originalHash = originalBody.hashCode();
+
+                // 获取代理历史供历史参数策略使用
+                List<burp.api.montoya.proxy.ProxyHttpRequestResponse> history =
+                        montoyaApi.proxy().history();
+
+                // 生成所有 IDOR 变体
+                List<IdorScanVariant> variants = payloadService.generateVariants(baseRequest, history);
+                if (stopRequested.get()) return;
+
+                final int totalCount = variants.size();
+                SwingUtilities.invokeLater(() -> dialog.setTotal(totalCount));
+
+                if (totalCount == 0) {
+                    SwingUtilities.invokeLater(dialog::finish);
+                    return;
+                }
+
+                // 创建用户配置线程数的扫描线程池
+                ExecutorService scanPool = Executors.newFixedThreadPool(threadCount);
+                scanPoolRef.set(scanPool);
+
+                AtomicInteger completed = new AtomicInteger(0);
+                AtomicInteger indexCounter = new AtomicInteger(1);
+
+                for (IdorScanVariant variant : variants) {
+                    final int idx = indexCounter.getAndIncrement();
+                    scanPool.submit(() -> {
+                        if (!stopRequested.get()) {
+                            IdorScanResult result;
+                            long start = System.currentTimeMillis();
+                            try {
+                                burp.api.montoya.http.message.HttpRequestResponse response =
+                                        montoyaApi.http().sendRequest(variant.request());
+                                result = IdorScanResult.success(idx, variant, response, originalHash,
+                                        System.currentTimeMillis() - start);
+                            } catch (Exception ex) {
+                                result = IdorScanResult.failure(idx, variant, ex);
+                            }
+                            IdorScanResult finalResult = result;
+                            SwingUtilities.invokeLater(() -> dialog.addResult(finalResult));
+                        }
+                        if (completed.incrementAndGet() >= totalCount && !stopRequested.get()) {
+                            SwingUtilities.invokeLater(dialog::finish);
+                            scanPool.shutdown();
+                        }
+                    });
+                }
+            } catch (Exception ex) {
+                LogUtils.INSTANCE.error("IDOR 扫描出错", ex);
+            }
+        }));
+
+        dialog.showDialog();
     }
 
     /**
@@ -1080,6 +1187,31 @@ public class AuthKit implements BurpExtension {
                 api.repeater().sendToRepeater(updated, "AuthKit - Updated Auth");
             }
         });
+    }
+
+    /**
+     * 删除选中请求中的所有鉴权字段。
+     * 若在编辑器上下文中，直接回写编辑器；否则发送到 Repeater。
+     */
+    private void runDeleteAuthFields(MontoyaApi api,
+                                     burp.api.montoya.ui.contextmenu.ContextMenuEvent event,
+                                     List<burp.api.montoya.http.message.HttpRequestResponse> items) {
+        if (items == null || items.isEmpty()) return;
+        Optional<burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse> editorCtx =
+                event.messageEditorRequestResponse();
+        if (editorCtx.isPresent()) {
+            burp.api.montoya.http.message.requests.HttpRequest request =
+                    editorCtx.get().requestResponse().request();
+            if (request == null) return;
+            editorCtx.get().setRequest(AuthContextMenuProvider.removeAuthHeaders(request));
+        } else {
+            for (burp.api.montoya.http.message.HttpRequestResponse item : items) {
+                burp.api.montoya.http.message.requests.HttpRequest request = item.request();
+                if (request == null) continue;
+                api.repeater().sendToRepeater(
+                        AuthContextMenuProvider.removeAuthHeaders(request), "AuthKit - Removed Auth");
+            }
+        }
     }
 
     /**
