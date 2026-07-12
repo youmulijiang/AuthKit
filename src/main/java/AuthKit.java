@@ -1,5 +1,7 @@
 import burp.api.montoya.BurpExtension;
 import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.http.RedirectionMode;
+import burp.api.montoya.http.RequestOptions;
 import controller.AuthController;
 import core.AuthResultExportService;
 import core.Bypass403PayloadService;
@@ -953,47 +955,70 @@ public class AuthKit implements BurpExtension {
         }
         Bypass403ScanDialog dialog = new Bypass403ScanDialog(montoyaApi, parent);
         AtomicBoolean stopRequested = new AtomicBoolean(false);
-        dialog.setCloseHandler(() -> stopRequested.set(true));
-        dialog.showDialog();
-        executor.submit(() -> {
+        AtomicReference<ExecutorService> scanPoolRef = new AtomicReference<>();
+
+        dialog.setCloseHandler(() -> {
+            stopRequested.set(true);
+            ExecutorService pool = scanPoolRef.get();
+            if (pool != null) pool.shutdownNow();
+        });
+
+        dialog.setStartHandler((threadCount, followRedirects) -> executor.submit(() -> {
+            // 生成所有变体
             List<Bypass403RequestVariant> variants = new ArrayList<>();
             for (burp.api.montoya.http.message.HttpRequestResponse item : selectedItems) {
-                if (stopRequested.get()) {
-                    return;
-                }
+                if (stopRequested.get()) return;
                 if (item != null && item.request() != null) {
                     variants.addAll(payloadService.generateVariants(item.request()));
                 }
             }
-            if (stopRequested.get()) {
+            if (stopRequested.get()) return;
+
+            final int totalCount = variants.size();
+            SwingUtilities.invokeLater(() -> dialog.setTotal(totalCount));
+
+            if (totalCount == 0) {
+                SwingUtilities.invokeLater(dialog::finish);
                 return;
             }
-            SwingUtilities.invokeLater(() -> dialog.setTotal(variants.size()));
-            int index = 1;
+
+            // 构建请求选项（重定向控制）
+            RequestOptions requestOptions = RequestOptions.requestOptions()
+                    .withRedirectionMode(followRedirects ? RedirectionMode.ALWAYS : RedirectionMode.NEVER);
+
+            // 创建用户配置线程数的扫描线程池
+            ExecutorService scanPool = Executors.newFixedThreadPool(threadCount);
+            scanPoolRef.set(scanPool);
+
+            AtomicInteger completed = new AtomicInteger(0);
+            AtomicInteger indexCounter = new AtomicInteger(1);
+
             for (Bypass403RequestVariant variant : variants) {
-                if (stopRequested.get()) {
-                    break;
-                }
-                Bypass403ScanResult result;
-                long start = System.currentTimeMillis();
-                try {
-                    burp.api.montoya.http.message.HttpRequestResponse response =
-                            montoyaApi.http().sendRequest(variant.request());
-                    result = Bypass403ScanResult.success(index, variant, response,
-                            System.currentTimeMillis() - start);
-                } catch (Exception ex) {
-                    result = Bypass403ScanResult.failure(index, variant, ex);
-                }
-                Bypass403ScanResult finalResult = result;
-                if (!stopRequested.get()) {
-                    SwingUtilities.invokeLater(() -> dialog.addResult(finalResult));
-                }
-                index++;
+                final int idx = indexCounter.getAndIncrement();
+                scanPool.submit(() -> {
+                    if (!stopRequested.get()) {
+                        Bypass403ScanResult result;
+                        long start = System.currentTimeMillis();
+                        try {
+                            burp.api.montoya.http.message.HttpRequestResponse response =
+                                    montoyaApi.http().sendRequest(variant.request(), requestOptions);
+                            result = Bypass403ScanResult.success(idx, variant, response,
+                                    System.currentTimeMillis() - start);
+                        } catch (Exception ex) {
+                            result = Bypass403ScanResult.failure(idx, variant, ex);
+                        }
+                        Bypass403ScanResult finalResult = result;
+                        SwingUtilities.invokeLater(() -> dialog.addResult(finalResult));
+                    }
+                    if (completed.incrementAndGet() >= totalCount && !stopRequested.get()) {
+                        SwingUtilities.invokeLater(dialog::finish);
+                        scanPool.shutdown();
+                    }
+                });
             }
-            if (!stopRequested.get()) {
-                SwingUtilities.invokeLater(dialog::finish);
-            }
-        });
+        }));
+
+        dialog.showDialog();
     }
 
     /**

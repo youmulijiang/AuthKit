@@ -78,7 +78,7 @@ public class IdorPayloadService {
 
         String targetHost = safeHost(baseRequest);
         if (targetHost == null || targetHost.isEmpty()) return;
-g
+
         List<ParsedHttpParameter> baseParams = baseRequest.parameters();
         if (baseParams == null || baseParams.isEmpty()) return;
 
