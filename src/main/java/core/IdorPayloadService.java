@@ -93,7 +93,7 @@ public class IdorPayloadService {
 
             // 按优先级构建去重变体集，跳过原值和负数
             LinkedHashSet<String> mutations = new LinkedHashSet<>();
-            mutations.add(String.valueOf(numValue + 1));
+            if (numValue < Long.MAX_VALUE) mutations.add(String.valueOf(numValue + 1));
             if (numValue - 1 >= 0) mutations.add(String.valueOf(numValue - 1));
             mutations.add("1");
             mutations.add("0");
@@ -109,9 +109,11 @@ public class IdorPayloadService {
                 String newPath = String.join("/", segments);
                 segments[i] = segment; // restore
 
+                String query = baseRequest.query();
+                String fullPath = (query != null && !query.isEmpty()) ? newPath + "?" + query : newPath;
                 HttpRequest mutated;
                 try {
-                    mutated = baseRequest.withPath(newPath);
+                    mutated = baseRequest.withPath(fullPath);
                 } catch (Exception e) {
                     continue;
                 }
