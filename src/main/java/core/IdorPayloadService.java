@@ -1,5 +1,6 @@
 package core;
 
+import burp.api.montoya.http.message.MimeType;
 import burp.api.montoya.http.message.params.HttpParameter;
 import burp.api.montoya.http.message.params.ParsedHttpParameter;
 import burp.api.montoya.http.message.requests.HttpRequest;
@@ -18,6 +19,7 @@ import java.util.*;
 public class IdorPayloadService {
 
     private static final int MAX_MUTATIONS_PER_PARAM = 3;
+    private static final int MAX_MUTATIONS_PER_PATH_SEGMENT = 6;
 
     public List<IdorScanVariant> generateVariants(HttpRequest baseRequest,
                                                    List<ProxyHttpRequestResponse> proxyHistory) {
@@ -25,6 +27,7 @@ public class IdorPayloadService {
         List<IdorScanVariant> variants = new ArrayList<>();
         addNoAuthVariant(baseRequest, variants);
         addNumericParamVariants(baseRequest, variants);
+        addNumericPathVariants(baseRequest, variants);
         addProxyHistoryVariants(baseRequest, proxyHistory, variants);
         return variants;
     }
@@ -70,6 +73,55 @@ public class IdorPayloadService {
         }
     }
 
+    /** 策略 4：对 URL path 中的纯数字路径段启发式替换，每段独立生成最多 6 个变体 */
+    private void addNumericPathVariants(HttpRequest baseRequest, List<IdorScanVariant> variants) {
+        String path = baseRequest.pathWithoutQuery();
+        if (path == null || path.isEmpty()) return;
+
+        String[] segments = path.split("/", -1);
+
+        for (int i = 0; i < segments.length; i++) {
+            String segment = segments[i];
+            if (!isAllDigits(segment)) continue;
+
+            long numValue;
+            try {
+                numValue = Long.parseLong(segment);
+            } catch (NumberFormatException e) {
+                continue;
+            }
+
+            // 按优先级构建去重变体集，跳过原值和负数
+            LinkedHashSet<String> mutations = new LinkedHashSet<>();
+            mutations.add(String.valueOf(numValue + 1));
+            if (numValue - 1 >= 0) mutations.add(String.valueOf(numValue - 1));
+            mutations.add("1");
+            mutations.add("0");
+            mutations.add("99999");
+            mutations.add(segment + "0");
+
+            int count = 0;
+            for (String newValue : mutations) {
+                if (count >= MAX_MUTATIONS_PER_PATH_SEGMENT) break;
+                if (newValue.equals(segment)) continue;
+
+                segments[i] = newValue;
+                String newPath = String.join("/", segments);
+                segments[i] = segment; // restore
+
+                HttpRequest mutated;
+                try {
+                    mutated = baseRequest.withPath(newPath);
+                } catch (Exception e) {
+                    continue;
+                }
+                variants.add(new IdorScanVariant("numeric-path", "path[" + i + "]",
+                        segment, newValue, mutated));
+                count++;
+            }
+        }
+    }
+
     /** 策略 3：在同 host 的代理历史请求和响应体中查找相同参数名的不同值进行替换 */
     private void addProxyHistoryVariants(HttpRequest baseRequest,
                                           List<ProxyHttpRequestResponse> proxyHistory,
@@ -108,17 +160,20 @@ public class IdorPayloadService {
                 }
             }
 
-            // 扫描历史响应体中的参数值（启发式：JSON / form 格式）
+            // 扫描历史响应体中的参数值（按 MIME 类型选择提取策略）
             if (histItem.response() != null) {
-                String responseBody = histItem.response().bodyToString();
-                if (responseBody != null && !responseBody.isEmpty()) {
-                    for (Map.Entry<String, ParsedHttpParameter> entry : baseParamMap.entrySet()) {
-                        String key = entry.getKey();
-                        String paramName = entry.getValue().name();
-                        String originalValue = entry.getValue().value();
-                        String found = extractValueFromBody(responseBody, paramName);
-                        if (found != null && !found.equals(originalValue) && !found.isEmpty()) {
-                            historyValues.computeIfAbsent(key, k -> new LinkedHashSet<>()).add(found);
+                MimeType mimeType = histItem.response().mimeType();
+                if (isExtractableMimeType(mimeType)) {
+                    String responseBody = histItem.response().bodyToString();
+                    if (responseBody != null && !responseBody.isEmpty()) {
+                        for (Map.Entry<String, ParsedHttpParameter> entry : baseParamMap.entrySet()) {
+                            String key = entry.getKey();
+                            String paramName = entry.getValue().name();
+                            String originalValue = entry.getValue().value();
+                            String found = extractValueFromBody(responseBody, paramName, mimeType);
+                            if (found != null && !found.equals(originalValue) && !found.isEmpty()) {
+                                historyValues.computeIfAbsent(key, k -> new LinkedHashSet<>()).add(found);
+                            }
                         }
                     }
                 }
@@ -142,12 +197,31 @@ public class IdorPayloadService {
         }
     }
 
-    /**
-     * 从响应体中启发式提取指定参数名的值（支持 JSON 字符串值、JSON 数字值、form 格式）
-     */
-    private String extractValueFromBody(String body, String paramName) {
-        if (body == null || paramName == null || paramName.isEmpty()) return null;
+    /** 判断该 MIME 类型的响应体是否值得尝试提取参数值 */
+    private boolean isExtractableMimeType(MimeType mimeType) {
+        if (mimeType == null) return true;
+        return switch (mimeType) {
+            case JSON, HTML, XML, PLAIN_TEXT, NONE -> true;
+            default -> false; // 图片、二进制、音视频、字体等直接跳过
+        };
+    }
 
+    /**
+     * 按 MIME 类型路由，从响应体中提取指定参数名的值。
+     * JSON → 只走 JSON 提取；其余类型先尝试 JSON 再尝试 form。
+     */
+    private String extractValueFromBody(String body, String paramName, MimeType mimeType) {
+        if (body == null || paramName == null || paramName.isEmpty()) return null;
+        if (mimeType == MimeType.JSON) {
+            return extractFromJson(body, paramName);
+        }
+        // HTML / XML / PLAIN_TEXT / NONE 等：可能内嵌 JSON，先 JSON 再 form
+        String result = extractFromJson(body, paramName);
+        return result != null ? result : extractFromForm(body, paramName);
+    }
+
+    /** 从 JSON 体中提取参数值（支持字符串值和数字值） */
+    private String extractFromJson(String body, String paramName) {
         // JSON 字符串值："paramName":"value" 或 "paramName": "value"
         for (String pattern : new String[]{"\"" + paramName + "\":\"", "\"" + paramName + "\": \""}) {
             int idx = body.indexOf(pattern);
@@ -157,7 +231,6 @@ public class IdorPayloadService {
                 if (end > start) return body.substring(start, end);
             }
         }
-
         // JSON 数字值："paramName":123 或 "paramName": 123
         for (String prefix : new String[]{"\"" + paramName + "\":", "\"" + paramName + "\": "}) {
             int idx = body.indexOf(prefix);
@@ -173,8 +246,11 @@ public class IdorPayloadService {
                 }
             }
         }
+        return null;
+    }
 
-        // form 格式：paramName=value(&...)
+    /** 从 form-encoded 体中提取参数值（paramName=value&...） */
+    private String extractFromForm(String body, String paramName) {
         String formPattern = paramName + "=";
         int idx = body.indexOf(formPattern);
         if (idx >= 0) {
@@ -184,7 +260,6 @@ public class IdorPayloadService {
             String val = body.substring(start, end).trim();
             if (!val.isEmpty()) return val;
         }
-
         return null;
     }
 
