@@ -11,6 +11,7 @@ import utils.I18n;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.datatransfer.StringSelection;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -320,7 +321,7 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
         return item;
     }
 
-    /** 构建"更新鉴权字段"父菜单（含三个子菜单）。 */
+    /** 构建"处理鉴权字段"父菜单（含四个子菜单）。 */
     private Component buildUpdateAuthMenu(ContextMenuEvent event, List<HttpRequestResponse> selectedItems) {
         I18n i18n = I18n.getInstance();
         JMenu menu = new JMenu(i18n.text("auth_context_menu", "menu.updateAuth"));
@@ -333,6 +334,14 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
         historyItem.addActionListener(e -> selectFromHistoryHandler.accept(event, selectedItems));
         menu.add(historyItem);
 
+        JMenuItem copyAsCurlItem = new JMenuItem(i18n.text("auth_context_menu", "menu.updateAuth.copyAsCurl"));
+        copyAsCurlItem.addActionListener(e -> {
+            String curlText = extractAuthHeadersAsCurl(selectedItems);
+            Toolkit.getDefaultToolkit().getSystemClipboard()
+                    .setContents(new StringSelection(curlText), null);
+        });
+        menu.add(copyAsCurlItem);
+
         menu.addSeparator();
 
         JMenuItem clearAllItem = new JMenuItem(i18n.text("auth_context_menu", "menu.updateAuth.clearAll"));
@@ -340,6 +349,25 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
         menu.add(clearAllItem);
 
         return menu;
+    }
+
+    /**
+     * 将选中请求中的鉴权字段格式化为 curl -H 参数，各字段以英文逗号隔开。
+     */
+    static String extractAuthHeadersAsCurl(List<HttpRequestResponse> selectedItems) {
+        List<String> parts = new ArrayList<>();
+        for (HttpRequestResponse reqResp : selectedItems) {
+            HttpRequest request = reqResp.request();
+            if (request == null) {
+                continue;
+            }
+            for (HttpHeader header : request.headers()) {
+                if (isAuthHeader(header.name())) {
+                    parts.add(header.name() + ":" + header.value() + ";");
+                }
+            }
+        }
+        return String.join(",", parts);
     }
 
     /**
