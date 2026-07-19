@@ -59,6 +59,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public class AuthKit implements BurpExtension {
 
+    private static final String AuthKit_Version = "1.8.2";
     private static final int AUTO_DIFF_DEBOUNCE_MS = 180;
     private static final int DATA_TABLE_FIXED_COLUMN_COUNT = 3;
     private static final AtomicBoolean WELCOME_BANNER_PRINTED = new AtomicBoolean(false);
@@ -213,7 +214,7 @@ public class AuthKit implements BurpExtension {
                 "[   Pwn The Planet, One HTTP at a Time  ]\n" +
                         "[#] Author: youmulijiang\n" +
                         "[#] Github: https://github.com/youmulijiang\n" +
-                        "[#] Version: 1.8.2\n"
+                        "[#] Version: %s\n",AuthKit_Version
         ));
     }
 
