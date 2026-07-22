@@ -3,6 +3,7 @@ package core;
 import burp.api.montoya.core.ToolType;
 import burp.api.montoya.http.handler.HttpResponseReceived;
 import burp.api.montoya.http.message.requests.HttpRequest;
+import core.service.ConfigRequestFilter;
 import model.ConfigModel;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -29,7 +30,7 @@ class HttpRequestHandlerTest {
         configModel = new ConfigModel();
         configModel.setEnabled(true);
         callback = mock(BiConsumer.class);
-        handler = new HttpRequestHandler(configModel, callback);
+        handler = new HttpRequestHandler(new ConfigRequestFilter(configModel), callback);
     }
 
     @Test

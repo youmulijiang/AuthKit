@@ -17,6 +17,7 @@ import core.FakeIpService;
 import core.HttpRequestHandler;
 import core.RequestReplayService;
 import core.TextDiffService;
+import core.service.ConfigRequestFilter;
 import core.processor.HeaderReplaceProcessor;
 import core.processor.ParamReplaceProcessor;
 import core.processor.ProcessorChain;
@@ -156,7 +157,8 @@ public class AuthKit implements BurpExtension {
         montoyaApi.userInterface().registerHttpRequestEditorProvider(new JwtRequestEditorProvider(montoyaApi));
 
         // 创建并注册 HttpRequestHandler
-        HttpRequestHandler httpHandler = new HttpRequestHandler(configModel, (request, response) -> {
+        ConfigRequestFilter requestFilter = new ConfigRequestFilter(configModel);
+        HttpRequestHandler httpHandler = new HttpRequestHandler(requestFilter, (request, response) -> {
             // 去重检查：相同 method + url 的请求只处理一次
             if (!controller.isNewRequest(request.method(), request.url())) {
                 return;

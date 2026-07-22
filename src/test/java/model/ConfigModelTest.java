@@ -1,7 +1,5 @@
 package model;
 
-import burp.api.montoya.core.ToolType;
-
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -12,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * ConfigModel 单元测试
+ * 仅覆盖数据存储与原始文本解析 getter；过滤决策逻辑见 {@code ConfigRequestFilterTest}。
  */
 class ConfigModelTest {
 
@@ -109,72 +108,6 @@ class ConfigModelTest {
     }
 
     @Test
-    @DisplayName("Tool Type Scope 默认应仅放行 Proxy 和 Repeater")
-    void toolTypeScope_shouldHaveCorrectDefaults() {
-        ConfigModel config = new ConfigModel();
-
-        assertFalse(config.shouldFilterToolType(ToolType.PROXY));
-        assertFalse(config.shouldFilterToolType(ToolType.REPEATER));
-        assertTrue(config.shouldFilterToolType(ToolType.INTRUDER));
-        assertTrue(config.shouldFilterToolType(ToolType.EXTENSIONS));
-    }
-
-    @Test
-    @DisplayName("Tool Type Scope 自定义开关应生效")
-    void toolTypeScope_shouldRespectCustomSettings() {
-        ConfigModel config = new ConfigModel();
-        config.setProxyScopeEnabled(false);
-        config.setIntruderScopeEnabled(true);
-        config.setExtensionsScopeEnabled(true);
-
-        assertTrue(config.shouldFilterToolType(ToolType.PROXY));
-        assertFalse(config.shouldFilterToolType(ToolType.INTRUDER));
-        assertFalse(config.shouldFilterToolType(ToolType.EXTENSIONS));
-    }
-
-    @Test
-    @DisplayName("shouldFilterRequest 域名过滤启用时应过滤不在白名单的域名")
-    void shouldFilter_domainNotInWhitelist() {
-        ConfigModel config = new ConfigModel();
-        config.setDomainFilterEnabled(true);
-        config.setRawDomains("example.com");
-
-        assertTrue(config.shouldFilterDomain("other.com"));
-        assertFalse(config.shouldFilterDomain("example.com"));
-    }
-
-    @Test
-    @DisplayName("shouldFilterRequest 域名过滤关闭时不应过滤任何域名")
-    void shouldFilter_domainFilterDisabled() {
-        ConfigModel config = new ConfigModel();
-        config.setDomainFilterEnabled(false);
-
-        assertFalse(config.shouldFilterDomain("any.com"));
-    }
-
-    @Test
-    @DisplayName("shouldFilterMethod 方法过滤启用时应过滤指定方法")
-    void shouldFilter_methodInFilterList() {
-        ConfigModel config = new ConfigModel();
-        config.setMethodFilterEnabled(true);
-        config.setRawFilterMethods("OPTIONS, HEAD");
-
-        assertTrue(config.shouldFilterMethod("OPTIONS"));
-        assertFalse(config.shouldFilterMethod("GET"));
-    }
-
-    @Test
-    @DisplayName("shouldFilterStatusCode 状态码过滤启用时应过滤指定状态码")
-    void shouldFilter_statusCodeInFilterList() {
-        ConfigModel config = new ConfigModel();
-        config.setStatusCodeFilterEnabled(true);
-        config.setRawFilterStatusCodes("304, 204");
-
-        assertTrue(config.shouldFilterStatusCode(304));
-        assertFalse(config.shouldFilterStatusCode(200));
-    }
-
-    @Test
     @DisplayName("后缀黑名单默认应包含常见静态资源后缀")
     void extensionBlacklist_shouldHaveDefaults() {
         ConfigModel config = new ConfigModel();
@@ -186,58 +119,4 @@ class ConfigModelTest {
         assertFalse(exts.contains("doc"));
         assertFalse(exts.contains("pdf"));
     }
-
-    @Test
-    @DisplayName("shouldFilterExtension 启用时应过滤黑名单中的后缀")
-    void shouldFilter_extensionInBlacklist() {
-        ConfigModel config = new ConfigModel();
-        config.setExtensionFilterEnabled(true);
-
-        assertTrue(config.shouldFilterExtension("/style.css"));
-        assertTrue(config.shouldFilterExtension("/app.js"));
-        assertTrue(config.shouldFilterExtension("/logo.png"));
-    }
-
-    @Test
-    @DisplayName("shouldFilterExtension 启用时不应过滤非黑名单后缀")
-    void shouldFilter_extensionNotInBlacklist() {
-        ConfigModel config = new ConfigModel();
-        config.setExtensionFilterEnabled(true);
-
-        assertFalse(config.shouldFilterExtension("/api/users"));
-        assertFalse(config.shouldFilterExtension("/report.pdf"));
-        assertFalse(config.shouldFilterExtension("/file.doc"));
-    }
-
-    @Test
-    @DisplayName("shouldFilterExtension 关闭时不应过滤任何后缀")
-    void shouldFilter_extensionFilterDisabled() {
-        ConfigModel config = new ConfigModel();
-        config.setExtensionFilterEnabled(false);
-
-        assertFalse(config.shouldFilterExtension("/style.css"));
-    }
-
-    @Test
-    @DisplayName("shouldFilterExtension 自定义黑名单应生效")
-    void shouldFilter_customExtensionBlacklist() {
-        ConfigModel config = new ConfigModel();
-        config.setExtensionFilterEnabled(true);
-        config.setRawExtensionBlacklist("abc, xyz");
-
-        assertTrue(config.shouldFilterExtension("/test.abc"));
-        assertTrue(config.shouldFilterExtension("/test.xyz"));
-        assertFalse(config.shouldFilterExtension("/test.css"));
-    }
-
-    @Test
-    @DisplayName("shouldFilterExtension 无后缀路径不应被过滤")
-    void shouldFilter_noExtension_shouldNotFilter() {
-        ConfigModel config = new ConfigModel();
-        config.setExtensionFilterEnabled(true);
-
-        assertFalse(config.shouldFilterExtension("/api/users"));
-        assertFalse(config.shouldFilterExtension("/api/v1/login"));
-    }
 }
-

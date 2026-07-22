@@ -4,31 +4,30 @@ import burp.api.montoya.core.ToolSource;
 import burp.api.montoya.core.ToolType;
 import burp.api.montoya.http.handler.*;
 import burp.api.montoya.http.message.requests.HttpRequest;
-import model.ConfigModel;
+import core.service.RequestFilter;
 import utils.LogUtils;
 
-import java.net.URI;
 import java.util.function.BiConsumer;
 
 /**
  * HTTP 请求拦截处理器
- * 实现 Montoya HttpHandler 接口，在响应接收时根据配置过滤请求，
+ * 实现 Montoya HttpHandler 接口，在响应接收时根据 {@link RequestFilter} 过滤请求，
  * 通过过滤的请求交给回调函数处理（由 AuthController 注册）。
  */
 public class HttpRequestHandler implements HttpHandler {
 
-    private final ConfigModel configModel;
+    private final RequestFilter requestFilter;
     private final BiConsumer<HttpRequest, HttpResponseReceived> onRequestCaptured;
 
     /**
      * 构造 HTTP 请求处理器
      *
-     * @param configModel       插件配置模型
+     * @param requestFilter     请求过滤策略
      * @param onRequestCaptured 请求捕获回调（参数: 原始请求, 拦截响应）
      */
-    public HttpRequestHandler(ConfigModel configModel,
+    public HttpRequestHandler(RequestFilter requestFilter,
                               BiConsumer<HttpRequest, HttpResponseReceived> onRequestCaptured) {
-        this.configModel = configModel;
+        this.requestFilter = requestFilter;
         this.onRequestCaptured = onRequestCaptured;
     }
 
@@ -74,31 +73,7 @@ public class HttpRequestHandler implements HttpHandler {
      * @return true 表示应处理，false 表示应过滤
      */
     public boolean shouldProcess(HttpRequest request, int statusCode, ToolType toolType) {
-        if (!configModel.isEnabled()) {
-            return false;
-        }
-        if (configModel.shouldFilterToolType(toolType)) {
-            return false;
-        }
-        if (configModel.shouldFilterMethod(request.method())) {
-            return false;
-        }
-        if (configModel.isDomainFilterEnabled()) {
-            String host = extractHost(request.url());
-            if (configModel.shouldFilterDomain(host)) {
-                return false;
-            }
-        }
-        if (configModel.shouldFilterPath(request.path())) {
-            return false;
-        }
-        if (configModel.shouldFilterExtension(request.path())) {
-            return false;
-        }
-        if (configModel.shouldFilterStatusCode(statusCode)) {
-            return false;
-        }
-        return true;
+        return requestFilter.shouldProcess(request, statusCode, toolType);
     }
 
     /**
@@ -113,17 +88,4 @@ public class HttpRequestHandler implements HttpHandler {
             onRequestCaptured.accept(request, responseReceived);
         }
     }
-
-    /**
-     * 从 URL 中提取主机名
-     */
-    private String extractHost(String url) {
-        try {
-            URI uri = URI.create(url);
-            return uri.getHost();
-        } catch (Exception e) {
-            return "";
-        }
-    }
 }
-

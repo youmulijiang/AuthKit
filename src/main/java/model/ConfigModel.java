@@ -1,15 +1,16 @@
 package model;
 
-import burp.api.montoya.core.ToolType;
-
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
 /**
- * 插件配置数据模型
- * 封装 ConfigurationPanel 中的所有配置项，提供结构化的配置数据访问。
+ * 插件配置数据模型（纯数据 POJO）
+ * <p>
+ * 封装 ConfigurationPanel 中的所有配置项字段与原始文本解析 getter。
+ * 过滤决策逻辑已抽离至 {@link core.service.ConfigRequestFilter}，
+ * 本类仅承担数据存储与结构化访问职责。
  */
 public class ConfigModel {
 
@@ -107,31 +108,6 @@ public class ConfigModel {
         this.statusCodeFilterEnabled = statusCodeFilterEnabled;
     }
 
-    /** 设置原始域名文本 */
-    public void setRawDomains(String rawDomains) {
-        this.rawDomains = rawDomains != null ? rawDomains : "";
-    }
-
-    /** 设置原始过滤方法文本 */
-    public void setRawFilterMethods(String rawFilterMethods) {
-        this.rawFilterMethods = rawFilterMethods != null ? rawFilterMethods : "";
-    }
-
-    /** 设置原始过滤路径文本 */
-    public void setRawFilterPaths(String rawFilterPaths) {
-        this.rawFilterPaths = rawFilterPaths != null ? rawFilterPaths : "";
-    }
-
-    /** 设置原始过滤状态码文本 */
-    public void setRawFilterStatusCodes(String rawFilterStatusCodes) {
-        this.rawFilterStatusCodes = rawFilterStatusCodes != null ? rawFilterStatusCodes : "";
-    }
-
-    /** 设置原始认证头文本 */
-    public void setRawAuthHeaders(String rawAuthHeaders) {
-        this.rawAuthHeaders = rawAuthHeaders != null ? rawAuthHeaders : "";
-    }
-
     /** 后缀黑名单过滤是否启用 */
     public boolean isExtensionFilterEnabled() {
         return extensionFilterEnabled;
@@ -182,6 +158,56 @@ public class ConfigModel {
         this.extensionsScopeEnabled = extensionsScopeEnabled;
     }
 
+    /** 设置原始域名文本 */
+    public void setRawDomains(String rawDomains) {
+        this.rawDomains = rawDomains != null ? rawDomains : "";
+    }
+
+    /** 获取原始域名文本 */
+    public String getRawDomains() {
+        return rawDomains;
+    }
+
+    /** 设置原始过滤方法文本 */
+    public void setRawFilterMethods(String rawFilterMethods) {
+        this.rawFilterMethods = rawFilterMethods != null ? rawFilterMethods : "";
+    }
+
+    /** 获取原始过滤方法文本 */
+    public String getRawFilterMethods() {
+        return rawFilterMethods;
+    }
+
+    /** 设置原始过滤路径文本 */
+    public void setRawFilterPaths(String rawFilterPaths) {
+        this.rawFilterPaths = rawFilterPaths != null ? rawFilterPaths : "";
+    }
+
+    /** 获取原始过滤路径文本 */
+    public String getRawFilterPaths() {
+        return rawFilterPaths;
+    }
+
+    /** 设置原始过滤状态码文本 */
+    public void setRawFilterStatusCodes(String rawFilterStatusCodes) {
+        this.rawFilterStatusCodes = rawFilterStatusCodes != null ? rawFilterStatusCodes : "";
+    }
+
+    /** 获取原始过滤状态码文本 */
+    public String getRawFilterStatusCodes() {
+        return rawFilterStatusCodes;
+    }
+
+    /** 设置原始认证头文本 */
+    public void setRawAuthHeaders(String rawAuthHeaders) {
+        this.rawAuthHeaders = rawAuthHeaders != null ? rawAuthHeaders : "";
+    }
+
+    /** 获取原始认证头文本 */
+    public String getRawAuthHeaders() {
+        return rawAuthHeaders;
+    }
+
     /** 设置原始后缀黑名单文本 */
     public void setRawExtensionBlacklist(String rawExtensionBlacklist) {
         this.rawExtensionBlacklist = rawExtensionBlacklist != null ? rawExtensionBlacklist : "";
@@ -207,41 +233,6 @@ public class ConfigModel {
         return result;
     }
 
-    /**
-     * 判断是否应根据文件后缀过滤请求
-     *
-     * @param path 请求路径
-     * @return true 表示应过滤
-     */
-    public boolean shouldFilterExtension(String path) {
-        if (!extensionFilterEnabled) {
-            return false;
-        }
-        String extension = extractExtension(path);
-        if (extension.isEmpty()) {
-            return false;
-        }
-        return getExtensionBlacklist().contains(extension.toLowerCase());
-    }
-
-    /**
-     * 从路径中提取文件后缀（不含点号）
-     */
-    private String extractExtension(String path) {
-        if (path == null || path.isEmpty()) {
-            return "";
-        }
-        // 去掉查询参数
-        int queryIndex = path.indexOf('?');
-        String cleanPath = queryIndex >= 0 ? path.substring(0, queryIndex) : path;
-        int dotIndex = cleanPath.lastIndexOf('.');
-        int slashIndex = cleanPath.lastIndexOf('/');
-        if (dotIndex > slashIndex && dotIndex < cleanPath.length() - 1) {
-            return cleanPath.substring(dotIndex + 1);
-        }
-        return "";
-    }
-
     /** 解析域名白名单列表 */
     public List<String> getDomains() {
         return parseLines(rawDomains);
@@ -260,6 +251,9 @@ public class ConfigModel {
     /** 解析过滤状态码集合（逗号分隔） */
     public Set<Integer> getFilterStatusCodes() {
         Set<Integer> codes = new HashSet<>();
+        if (rawFilterStatusCodes == null || rawFilterStatusCodes.isBlank()) {
+            return codes;
+        }
         for (String item : rawFilterStatusCodes.split(",")) {
             String trimmed = item.trim();
             if (!trimmed.isEmpty()) {
@@ -275,81 +269,6 @@ public class ConfigModel {
     /** 解析认证头名称列表 */
     public List<String> getAuthHeaders() {
         return parseLines(rawAuthHeaders);
-    }
-
-
-    /**
-     * 判断是否应过滤指定域名
-     *
-     * @param domain 请求域名
-     * @return true 表示应过滤（不处理），false 表示放行
-     */
-    public boolean shouldFilterDomain(String domain) {
-        if (!domainFilterEnabled) {
-            return false;
-        }
-        List<String> domains = getDomains();
-        return !domains.contains(domain);
-    }
-
-    /**
-     * 判断是否应过滤指定 HTTP 方法
-     *
-     * @param method HTTP 方法
-     * @return true 表示应过滤
-     */
-    public boolean shouldFilterMethod(String method) {
-        if (!methodFilterEnabled) {
-            return false;
-        }
-        return getFilterMethods().contains(method);
-    }
-
-    /**
-     * 判断是否应过滤指定路径
-     *
-     * @param path 请求路径
-     * @return true 表示应过滤
-     */
-    public boolean shouldFilterPath(String path) {
-        if (!pathFilterEnabled) {
-            return false;
-        }
-        List<String> paths = getFilterPaths();
-        for (String filterPath : paths) {
-            if (path.startsWith(filterPath)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * 判断是否应过滤指定状态码
-     *
-     * @param statusCode 响应状态码
-     * @return true 表示应过滤
-     */
-    public boolean shouldFilterStatusCode(int statusCode) {
-        if (!statusCodeFilterEnabled) {
-            return false;
-        }
-        return getFilterStatusCodes().contains(statusCode);
-    }
-
-    /** 判断是否应按 Tool Type 过滤 */
-    public boolean shouldFilterToolType(ToolType toolType) {
-        if (toolType == null) {
-            return false;
-        }
-
-        return switch (toolType) {
-            case PROXY -> !proxyScopeEnabled;
-            case REPEATER -> !repeaterScopeEnabled;
-            case INTRUDER -> !intruderScopeEnabled;
-            case EXTENSIONS -> !extensionsScopeEnabled;
-            default -> true;
-        };
     }
 
     /** 解析多行文本为列表（去空行、去首尾空格） */
