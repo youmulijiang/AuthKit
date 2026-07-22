@@ -2,6 +2,7 @@ import burp.api.montoya.BurpExtension;
 import burp.api.montoya.MontoyaApi;
 import controller.AuthController;
 import controller.ContextMenuController;
+import controller.DataTableController;
 import core.AuthResultExportService;
 import core.DiffService;
 import core.FakeIpIntruderHttpHandler;
@@ -104,36 +105,14 @@ public class AuthKit implements BurpExtension {
 
         // 创建控制器
         AuthController controller = new AuthController(configModel, replayService, diffService);
+        DataTableController dataTableController = new DataTableController(
+                mainPanel, controller, exportService, executor);
 
         // 绑定 UI → ConfigModel 同步
         ConfigBinder.bind(mainPanel.getPanelConfiguration(), configModel);
 
-        // 绑定 Clear 按钮
-        mainPanel.getPanelConfiguration().getBtnClearTable().addActionListener(e -> {
-            controller.clearAll();
-            mainPanel.getPanelDataTable().clearAll();
-            mainPanel.getPanelMetadataTable().clearAll();
-            mainPanel.getPanelCompare().clearAll();
-            lastCompareSampleId = -1;
-        });
-
-        // 绑定展示指标下拉框切换 → 刷新 DataTable 中鉴权对象列的数据
-        mainPanel.getPanelConfiguration().getComboBoxDisplayMetric().addActionListener(
-                e -> refreshDataTable(mainPanel, controller));
-
-        // 绑定仅显示越权行勾选框
-        mainPanel.getPanelConfiguration().getCheckBoxUnauthorizedOnly().addActionListener(e ->
-                mainPanel.getPanelDataTable().setUnauthorizedOnly(
-                        mainPanel.getPanelConfiguration().getCheckBoxUnauthorizedOnly().isSelected()));
-
-        // 绑定筛选功能
-        bindFilter(mainPanel, controller);
-
-        // 绑定 DataTable 行选中事件 → 更新 MetadataTable + ComparePanel
-        bindTableSelection(mainPanel, controller);
-
-        // 绑定 DataTable 多选右键动作 → 导出 / 复制 URL
-        bindDataTableSelectionActions(mainPanel, controller, exportService);
+        // 绑定 DataTable 相关事件（筛选/选中/导出/Clear/指标/越权勾选）
+        dataTableController.bindAll();
 
         // 绑定自动 Diff 事件（懒加载，tab 切换时自动触发）
         bindAutoDiff(mainPanel.getPanelCompare(), diffService);
@@ -141,7 +120,7 @@ public class AuthKit implements BurpExtension {
         // 注册右键菜单
         ContextMenuController contextMenuController = new ContextMenuController(
                 montoyaApi, mainPanel, controller, replayService, fakeIpService, executor,
-                () -> refreshDataTable(mainPanel, controller));
+                dataTableController::refresh);
         contextMenuController.register();
 
         // 注册 Intruder 随机 IP payload 生成器（fakeIpPayloads）
@@ -153,44 +132,10 @@ public class AuthKit implements BurpExtension {
         // 注册 JWT 编辑器 Provider（在 Burp 请求编辑器中添加 JWT 选项卡）
         montoyaApi.userInterface().registerHttpRequestEditorProvider(new JwtRequestEditorProvider(montoyaApi));
 
-        // 创建并注册 HttpRequestHandler
+        // 创建并注册 HttpRequestHandler（回调委托给 DataTableController）
         ConfigRequestFilter requestFilter = new ConfigRequestFilter(configModel);
-        HttpRequestHandler httpHandler = new HttpRequestHandler(requestFilter, (request, response) -> {
-            // 去重检查：相同 method + url 的请求只处理一次
-            if (!controller.isNewRequest(request.method(), request.url())) {
-                return;
-            }
-            executor.submit(() -> {
-                try {
-                    // 构建原始报文数据（含 Montoya 原始对象引用）
-                    MessageDataModel originalData = new MessageDataModel(
-                            request.toString(), response.toString(),
-                            response.statusCode(),
-                            response.bodyToString().length(),
-                            core.HashService.hash(response.bodyToString()),
-                            request, response
-                    );
-                    originalData.setContentType(response.headerValue("Content-Type") != null
-                            ? response.headerValue("Content-Type") : "");
-                    // 从拦截响应的 annotations 读取 Burp 备注
-                    if (response.annotations() != null && response.annotations().hasNotes()) {
-                        originalData.setNote(response.annotations().notes());
-                    }
-
-                    // 从 UserPanel 收集启用的用户配置
-                    List<AuthUserModel> users = UserPanelBinder.collectUsers(mainPanel.getPanelUser());
-
-                    // 处理请求
-                    CompareSampleModel sample = controller.processRequest(
-                            request, response, originalData, users);
-
-                    // 更新 UI（在 EDT 线程）
-                    SwingUtilities.invokeLater(() -> refreshDataTable(mainPanel, controller));
-                } catch (Exception ex) {
-                    LogUtils.INSTANCE.error("Error processing request", ex);
-                }
-            });
-        });
+        HttpRequestHandler httpHandler = new HttpRequestHandler(requestFilter,
+                dataTableController::handleCapturedRequest);
         montoyaApi.http().registerHttpHandler(httpHandler);
 
         // 注册插件卸载时清理线程池
