@@ -3,6 +3,7 @@ import burp.api.montoya.MontoyaApi;
 import controller.AuthController;
 import controller.ContextMenuController;
 import controller.DataTableController;
+import controller.DiffController;
 import core.AuthResultExportService;
 import core.DiffService;
 import core.FakeIpIntruderHttpHandler;
@@ -115,7 +116,9 @@ public class AuthKit implements BurpExtension {
         dataTableController.bindAll();
 
         // 绑定自动 Diff 事件（懒加载，tab 切换时自动触发）
-        bindAutoDiff(mainPanel.getPanelCompare(), diffService);
+        DiffController diffController = new DiffController(
+                mainPanel.getPanelCompare(), diffService, diffExecutor);
+        diffController.bind();
 
         // 注册右键菜单
         ContextMenuController contextMenuController = new ContextMenuController(
