@@ -30,10 +30,13 @@ import model.CompareSampleModel;
 import model.ConfigModel;
 import model.MessageDataModel;
 import utils.ApiUtils;
+import utils.HttpTextUtils;
 import utils.I18n;
 import utils.LogUtils;
 import view.AuthContextMenuProvider;
 import view.MainPanel;
+import view.binding.ConfigBinder;
+import view.binding.UserPanelBinder;
 import view.component.*;
 import view.dialog.AuthHistorySelectDialog;
 import view.dialog.Bypass403ScanDialog;
@@ -119,7 +122,7 @@ public class AuthKit implements BurpExtension {
         AuthController controller = new AuthController(configModel, replayService, diffService);
 
         // 绑定 UI → ConfigModel 同步
-        bindConfigSync(mainPanel.getPanelConfiguration(), configModel);
+        ConfigBinder.bind(mainPanel.getPanelConfiguration(), configModel);
 
         // 绑定 Clear 按钮
         mainPanel.getPanelConfiguration().getBtnClearTable().addActionListener(e -> {
@@ -188,7 +191,7 @@ public class AuthKit implements BurpExtension {
                     }
 
                     // 从 UserPanel 收集启用的用户配置
-                    List<AuthUserModel> users = collectUsers(mainPanel.getPanelUser());
+                    List<AuthUserModel> users = UserPanelBinder.collectUsers(mainPanel.getPanelUser());
 
                     // 处理请求
                     CompareSampleModel sample = controller.processRequest(
@@ -248,7 +251,7 @@ public class AuthKit implements BurpExtension {
                 switch (filterType) {
                     case ToolbarPanel.FILTER_HOST:
                         if (data.getRequest() != null) {
-                            String host = extractHost(data.getRequest());
+                            String host = HttpTextUtils.extractHost(data.getRequest());
                             if (host != null) sb.append(host).append(" ");
                         }
                         break;
@@ -294,86 +297,6 @@ public class AuthKit implements BurpExtension {
 
         // 下拉框切换时重新筛选
         toolbar.getComboBoxFilterType().addActionListener(e -> doFilter.run());
-    }
-
-    /**
-     * 绑定 ConfigurationPanel UI 控件变化 → ConfigModel 同步
-     */
-    private void bindConfigSync(ConfigurationPanel panel, ConfigModel model) {
-        panel.getCheckBoxEnabled().addActionListener(e ->
-                model.setEnabled(panel.getCheckBoxEnabled().isSelected()));
-        panel.getCheckBoxDomainFilter().addActionListener(e ->
-                model.setDomainFilterEnabled(panel.getCheckBoxDomainFilter().isSelected()));
-        panel.getCheckBoxScopeProxy().addActionListener(e ->
-                model.setProxyScopeEnabled(panel.getCheckBoxScopeProxy().isSelected()));
-        panel.getCheckBoxScopeRepeater().addActionListener(e ->
-                model.setRepeaterScopeEnabled(panel.getCheckBoxScopeRepeater().isSelected()));
-        panel.getCheckBoxScopeIntruder().addActionListener(e ->
-                model.setIntruderScopeEnabled(panel.getCheckBoxScopeIntruder().isSelected()));
-        panel.getCheckBoxScopeExtensions().addActionListener(e ->
-                model.setExtensionsScopeEnabled(panel.getCheckBoxScopeExtensions().isSelected()));
-        panel.getCheckBoxMethodFilter().addActionListener(e ->
-                model.setMethodFilterEnabled(panel.getCheckBoxMethodFilter().isSelected()));
-        panel.getCheckBoxPathFilter().addActionListener(e ->
-                model.setPathFilterEnabled(panel.getCheckBoxPathFilter().isSelected()));
-        panel.getCheckBoxStatusCodeFilter().addActionListener(e ->
-                model.setStatusCodeFilterEnabled(panel.getCheckBoxStatusCodeFilter().isSelected()));
-        panel.getCheckBoxExtensionFilter().addActionListener(e ->
-                model.setExtensionFilterEnabled(panel.getCheckBoxExtensionFilter().isSelected()));
-
-        // 文本区域使用 FocusListener 在失焦时同步
-        panel.getTextAreaDomain().addFocusListener(new java.awt.event.FocusAdapter() {
-            @Override
-            public void focusLost(java.awt.event.FocusEvent e) {
-                model.setRawDomains(panel.getTextAreaDomain().getText());
-            }
-        });
-        panel.getTextFieldMethod().addFocusListener(new java.awt.event.FocusAdapter() {
-            @Override
-            public void focusLost(java.awt.event.FocusEvent e) {
-                model.setRawFilterMethods(panel.getTextFieldMethod().getText());
-            }
-        });
-        panel.getTextAreaPath().addFocusListener(new java.awt.event.FocusAdapter() {
-            @Override
-            public void focusLost(java.awt.event.FocusEvent e) {
-                model.setRawFilterPaths(panel.getTextAreaPath().getText());
-            }
-        });
-        panel.getTextFieldStatusCode().addFocusListener(new java.awt.event.FocusAdapter() {
-            @Override
-            public void focusLost(java.awt.event.FocusEvent e) {
-                model.setRawFilterStatusCodes(panel.getTextFieldStatusCode().getText());
-            }
-        });
-        panel.getTextAreaAuthHeaders().addFocusListener(new java.awt.event.FocusAdapter() {
-            @Override
-            public void focusLost(java.awt.event.FocusEvent e) {
-                model.setRawAuthHeaders(panel.getTextAreaAuthHeaders().getText());
-            }
-        });
-        panel.getTextFieldExtensionBlacklist().addFocusListener(new java.awt.event.FocusAdapter() {
-            @Override
-            public void focusLost(java.awt.event.FocusEvent e) {
-                model.setRawExtensionBlacklist(panel.getTextFieldExtensionBlacklist().getText());
-            }
-        });
-
-        // 初始同步默认值
-        model.setEnabled(panel.getCheckBoxEnabled().isSelected());
-        model.setDomainFilterEnabled(panel.getCheckBoxDomainFilter().isSelected());
-        model.setProxyScopeEnabled(panel.getCheckBoxScopeProxy().isSelected());
-        model.setRepeaterScopeEnabled(panel.getCheckBoxScopeRepeater().isSelected());
-        model.setIntruderScopeEnabled(panel.getCheckBoxScopeIntruder().isSelected());
-        model.setExtensionsScopeEnabled(panel.getCheckBoxScopeExtensions().isSelected());
-        model.setMethodFilterEnabled(panel.getCheckBoxMethodFilter().isSelected());
-        model.setPathFilterEnabled(panel.getCheckBoxPathFilter().isSelected());
-        model.setStatusCodeFilterEnabled(panel.getCheckBoxStatusCodeFilter().isSelected());
-        model.setExtensionFilterEnabled(panel.getCheckBoxExtensionFilter().isSelected());
-        model.setRawFilterMethods(panel.getTextFieldMethod().getText());
-        model.setRawFilterStatusCodes(panel.getTextFieldStatusCode().getText());
-        model.setRawAuthHeaders(panel.getTextAreaAuthHeaders().getText());
-        model.setRawExtensionBlacklist(panel.getTextFieldExtensionBlacklist().getText());
     }
 
     /**
@@ -545,23 +468,6 @@ public class AuthKit implements BurpExtension {
         if (comparePanel.selectTargetTab(authName)) {
             comparePanel.selectTargetMessageTab(MessagePanel.RESPONSE_TAB_INDEX);
         }
-    }
-
-    /**
-     * 从 UserPanel 收集所有用户配置
-     */
-    private List<AuthUserModel> collectUsers(UserPanel userPanel) {
-        List<AuthUserModel> users = new ArrayList<>();
-        Map<String, AuthUserConfigPanel> panels = userPanel.getUserPanels();
-        for (Map.Entry<String, AuthUserConfigPanel> entry : panels.entrySet()) {
-            AuthUserConfigPanel configPanel = entry.getValue();
-            AuthUserModel user = new AuthUserModel(configPanel.getUserName());
-            user.setEnabled(configPanel.isUserEnabled());
-            user.setRawHeaders(configPanel.getTextAreaAuthHeaders().getText());
-            user.setRawParams(configPanel.getTextAreaParamReplacement().getText());
-            users.add(user);
-        }
-        return users;
     }
 
     /**
@@ -1047,7 +953,7 @@ public class AuthKit implements BurpExtension {
         }
 
         // 收集所有鉴权用户
-        List<AuthUserModel> users = collectUsers(mainPanel.getPanelUser());
+        List<AuthUserModel> users = UserPanelBinder.collectUsers(mainPanel.getPanelUser());
 
         // 处理请求
         final burp.api.montoya.http.message.responses.HttpResponse finalResponse = response;
@@ -1056,23 +962,5 @@ public class AuthKit implements BurpExtension {
 
         // 更新 UI
         SwingUtilities.invokeLater(() -> refreshDataTable(mainPanel, controller));
-    }
-
-    /**
-     * 从 HTTP 请求报文中提取 Host 头的值
-     *
-     * @param requestText 原始 HTTP 请求报文文本
-     * @return Host 头的值，未找到返回 null
-     */
-    private static String extractHost(String requestText) {
-        if (requestText == null || requestText.isEmpty()) {
-            return null;
-        }
-        for (String line : requestText.split("\r?\n")) {
-            if (line.toLowerCase().startsWith("host:")) {
-                return line.substring(5).trim();
-            }
-        }
-        return null;
     }
 }
