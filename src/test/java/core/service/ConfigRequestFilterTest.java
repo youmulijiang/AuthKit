@@ -59,6 +59,61 @@ class ConfigRequestFilterTest {
     }
 
     @Test
+    @DisplayName("shouldFilterDomain 应支持纯 IP 白名单")
+    void shouldFilter_ipWhitelist() {
+        ConfigModel config = new ConfigModel();
+        config.setDomainFilterEnabled(true);
+        config.setRawDomains("192.168.1.1");
+        ConfigRequestFilter filter = new ConfigRequestFilter(config);
+
+        assertFalse(filter.shouldFilterDomain("192.168.1.1"));
+        assertFalse(filter.shouldFilterDomain("192.168.1.1:8080"));
+        assertTrue(filter.shouldFilterDomain("10.0.0.1"));
+    }
+
+    @Test
+    @DisplayName("shouldFilterDomain 应支持 IP:port 白名单")
+    void shouldFilter_ipPortWhitelist() {
+        ConfigModel config = new ConfigModel();
+        config.setDomainFilterEnabled(true);
+        config.setRawDomains("192.168.1.1:8080");
+        ConfigRequestFilter filter = new ConfigRequestFilter(config);
+
+        assertFalse(filter.shouldFilterDomain("192.168.1.1:8080"));
+        assertTrue(filter.shouldFilterDomain("192.168.1.1:9090"));
+        assertTrue(filter.shouldFilterDomain("192.168.1.1"));
+        assertTrue(filter.shouldFilterDomain("10.0.0.1:8080"));
+    }
+
+    @Test
+    @DisplayName("shouldFilterDomain 应支持域名:port 白名单")
+    void shouldFilter_domainPortWhitelist() {
+        ConfigModel config = new ConfigModel();
+        config.setDomainFilterEnabled(true);
+        config.setRawDomains("api.example.com:8443");
+        ConfigRequestFilter filter = new ConfigRequestFilter(config);
+
+        assertFalse(filter.shouldFilterDomain("api.example.com:8443"));
+        assertTrue(filter.shouldFilterDomain("api.example.com:443"));
+        assertTrue(filter.shouldFilterDomain("api.example.com"));
+    }
+
+    @Test
+    @DisplayName("parseHostPort 应正确解析 IP、域名与端口")
+    void parseHostPort_shouldParseHostAndPort() {
+        assertEquals("example.com", ConfigRequestFilter.parseHostPort("example.com").host());
+        assertEquals(-1, ConfigRequestFilter.parseHostPort("example.com").port());
+
+        assertEquals("192.168.1.1", ConfigRequestFilter.parseHostPort("192.168.1.1").host());
+        assertEquals("192.168.1.1", ConfigRequestFilter.parseHostPort("192.168.1.1:8080").host());
+        assertEquals(8080, ConfigRequestFilter.parseHostPort("192.168.1.1:8080").port());
+
+        assertEquals("::1", ConfigRequestFilter.parseHostPort("[::1]").host());
+        assertEquals("::1", ConfigRequestFilter.parseHostPort("[::1]:8080").host());
+        assertEquals(8080, ConfigRequestFilter.parseHostPort("[::1]:8080").port());
+    }
+
+    @Test
     @DisplayName("shouldFilterMethod 方法过滤启用时应过滤指定方法")
     void shouldFilter_methodInFilterList() {
         ConfigModel config = new ConfigModel();

@@ -8,10 +8,12 @@ import core.Bypass403PayloadService;
 import core.FakeIpService;
 import core.HashService;
 import core.IdorPayloadService;
+import core.JwtPayloadService;
 import core.RequestReplayService;
 import core.service.AuthHistoryService;
 import core.service.Bypass403ScanService;
 import core.service.IdorScanService;
+import core.service.JwtScanService;
 import model.AuthUserModel;
 import model.MessageDataModel;
 import utils.LogUtils;
@@ -22,6 +24,7 @@ import view.component.NewUserDialog;
 import view.component.UserPanel;
 import view.dialog.Bypass403ScanDialog;
 import view.dialog.IdorScanDialog;
+import view.dialog.JwtScanDialog;
 
 import javax.swing.*;
 import java.util.ArrayList;
@@ -164,6 +167,11 @@ public class ContextMenuController {
         java.util.function.Consumer<List<HttpRequestResponse>> idorScanHandler =
                 selectedItems -> runIdorScan(mainPanel, selectedItems, idorScanService);
 
+        JwtPayloadService jwtPayloadService = new JwtPayloadService();
+        JwtScanService jwtScanService = new JwtScanService(montoyaApi, jwtPayloadService);
+        java.util.function.Consumer<List<HttpRequestResponse>> jwtScanHandler =
+                selectedItems -> runJwtScan(mainPanel, selectedItems, jwtScanService);
+
         AuthHistoryService authHistoryService = new AuthHistoryService(montoyaApi);
 
         // 更新为最新鉴权字段回调
@@ -187,6 +195,7 @@ public class ContextMenuController {
                         sendToRepeaterHandler, sendToIntruderHandler, bypass403ScanHandler,
                         updateToLatestAuthHandler, selectFromHistoryHandler, deleteAuthHandler);
         contextMenuProvider.setIdorScanHandler(idorScanHandler);
+        contextMenuProvider.setJwtScanHandler(jwtScanHandler);
         montoyaApi.userInterface().registerContextMenuItemsProvider(contextMenuProvider);
     }
 
@@ -272,6 +281,34 @@ public class ContextMenuController {
         dialog.setStartHandler(threadCount -> executor.submit(() ->
                 scanService.executeScan(selectedItems, dialog, threadCount, scanPoolRef, stopRequested)));
 
+        dialog.showDialog();
+    }
+
+    private void runJwtScan(JComponent parent, List<HttpRequestResponse> selectedItems,
+                            JwtScanService scanService) {
+        if (selectedItems == null || selectedItems.isEmpty()) return;
+
+        boolean containsJwt = selectedItems.stream().anyMatch(item -> item != null
+                && item.request() != null && new JwtPayloadService().containsJwt(item.request()));
+        if (!containsJwt) {
+            JOptionPane.showMessageDialog(parent,
+                    utils.I18n.getInstance().text("auth_context_menu", "dialog.jwtScan.noToken"),
+                    utils.I18n.getInstance().text("auth_context_menu", "dialog.jwtScan.title"),
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        JwtScanDialog dialog = new JwtScanDialog(montoyaApi, parent);
+        AtomicBoolean stopRequested = new AtomicBoolean(false);
+        AtomicReference<ExecutorService> scanPoolRef = new AtomicReference<>();
+        dialog.setCloseHandler(() -> {
+            stopRequested.set(true);
+            ExecutorService pool = scanPoolRef.get();
+            if (pool != null) pool.shutdownNow();
+        });
+        dialog.setStartHandler((threadCount, followRedirects) -> executor.submit(() ->
+                scanService.executeScan(selectedItems, dialog, threadCount, followRedirects,
+                        scanPoolRef, stopRequested)));
         dialog.showDialog();
     }
 }

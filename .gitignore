@@ -41,3 +41,5 @@ build/
 doc/
 out/
 .augment/
+.trae/
+.superpowers/

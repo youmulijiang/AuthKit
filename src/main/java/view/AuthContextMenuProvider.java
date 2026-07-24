@@ -73,6 +73,9 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
     /** IDOR 扫描回调 */
     private Consumer<List<HttpRequestResponse>> idorScanHandler = items -> {};
 
+    /** JWT 扫描回调 */
+    private Consumer<List<HttpRequestResponse>> jwtScanHandler = items -> {};
+
     /** 更新为最新鉴权字段回调：(event, selectedItems) */
     private final BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> updateToLatestAuthHandler;
 
@@ -169,6 +172,10 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
         this.idorScanHandler = handler != null ? handler : items -> {};
     }
 
+    public void setJwtScanHandler(Consumer<List<HttpRequestResponse>> handler) {
+        this.jwtScanHandler = handler != null ? handler : items -> {};
+    }
+
     @Override
     public List<Component> provideMenuItems(ContextMenuEvent event) {
         List<HttpRequestResponse> selectedItems = resolveSelectedItems(event);
@@ -195,7 +202,10 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
         // === Menu 5: IDOR Scan ===
         menuItems.add(buildIdorScanMenu(finalSelectedItems));
 
-        // === Menu 6: 更新鉴权字段 ===
+        // === Menu 6: JWT Scan ===
+        menuItems.add(buildJwtScanMenu(finalSelectedItems));
+
+        // === Menu 7: 更新鉴权字段 ===
         menuItems.add(buildUpdateAuthMenu(event, finalSelectedItems));
 
         return menuItems;
@@ -318,6 +328,12 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
     private Component buildIdorScanMenu(List<HttpRequestResponse> selectedItems) {
         JMenuItem item = new JMenuItem(I18n.getInstance().text("auth_context_menu", "menu.idor.scan"));
         item.addActionListener(e -> idorScanHandler.accept(selectedItems));
+        return item;
+    }
+
+    private Component buildJwtScanMenu(List<HttpRequestResponse> selectedItems) {
+        JMenuItem item = new JMenuItem(I18n.getInstance().text("auth_context_menu", "menu.jwt.scan"));
+        item.addActionListener(e -> jwtScanHandler.accept(selectedItems));
         return item;
     }
 

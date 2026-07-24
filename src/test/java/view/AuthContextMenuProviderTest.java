@@ -151,6 +151,32 @@ class AuthContextMenuProviderTest {
         }
     }
 
+    @Test
+    @DisplayName("JWT Scan 菜单应触发扫描回调")
+    void jwtScanMenu_shouldTriggerScanHandler() {
+        I18n i18n = I18n.getInstance();
+        I18n.Language originalLanguage = i18n.getCurrentLanguage();
+        i18n.setLanguage(I18n.Language.ENGLISH);
+        try {
+            HttpRequestResponse reqResp = mock(HttpRequestResponse.class);
+            MessageEditorHttpRequestResponse editorContext = mock(MessageEditorHttpRequestResponse.class);
+            when(editorContext.requestResponse()).thenReturn(reqResp);
+            List<HttpRequestResponse> scanned = new ArrayList<>();
+            AuthContextMenuProvider provider = new AuthContextMenuProvider(
+                    List::of, () -> true, () -> {}, items -> {}, (auth, user) -> {}, auth -> null);
+            provider.setJwtScanHandler(scanned::addAll);
+
+            List<Component> items = provider.provideMenuItems(mockContextMenuEvent(editorContext));
+            JMenuItem jwtItem = (JMenuItem) items.get(5);
+            assertEquals("JWT Scan", jwtItem.getText());
+            jwtItem.doClick();
+
+            assertEquals(List.of(reqResp), scanned);
+        } finally {
+            i18n.setLanguage(originalLanguage);
+        }
+    }
+
     private HttpRequest mockFakeIpRequest(String expectedIp) {
         HttpRequest request = mock(HttpRequest.class);
         when(request.hasHeader(anyString())).thenReturn(false);
