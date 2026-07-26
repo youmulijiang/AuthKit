@@ -36,7 +36,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class AuthKit implements BurpExtension {
 
-    private static final String AuthKit_Version = "1.9.0";
+    private static final String AuthKit_Version = "1.9.5";
     private static final AtomicBoolean WELCOME_BANNER_PRINTED = new AtomicBoolean(false);
 
     private ExecutorService executor;
