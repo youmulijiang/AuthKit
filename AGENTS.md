@@ -1,79 +1,40 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+## 1. 项目概述
 
-## Project Overview
+AuthKit 是基于 Java 17、Swing 和 Burp Montoya API 的 Burp Suite 鉴权测试扩展。
+它捕获 HTTP 流量，以 `Original / Unauthorized / 多用户` 身份重放请求，并比较响应以辅助发现 BOLA、水平越权和垂直越权。
+`AuthKit.java` 是装配入口；业务代码按 `controller / core / model / view / utils` 分层，测试位于 `src/test/java`。
+核心链路为：请求过滤 → 身份重放 → 响应评分 → Swing 界面展示。
 
-AuthKit is a Burp Suite extension for authorization testing (越权检测). It intercepts HTTP traffic, replays requests with different auth contexts (unauthorized, different user roles), and compares responses to detect broken access control (BOLA, horizontal/vertical privilege escalation). Built on the Burp Montoya API.
+详细结构、数据流和术语见 [架构说明](docs/architecture.md)。
 
-## Build & Test
+## 2. 快速命令
 
 ```bash
-mvn clean package          # Build fat JAR (includes shaded dependencies)
-mvn test                   # Run all tests (JUnit 5 + Mockito)
-mvn test -Dtest=ClassName  # Run a single test class
-mvn test -Dtest=ClassName#methodName  # Run a single test method
+mvn clean package                         # 测试并构建含依赖的 JAR
+mvn test                                  # 运行全部测试
+mvn test -Dtest=ClassName                 # 运行单个测试类
+mvn test -Dtest=ClassName#methodName      # 运行单个测试方法
 ```
 
-Output JAR: `target/AuthKit-1.0-SNAPSHOT.jar` — load via Burp Extensions > Add.
+项目当前没有独立启动脚本、格式化命令或环境变量文件。构建产物位于 `target/`，在 Burp 的 `Extensions > Installed > Add` 中加载。
 
-CI builds two JARs per release tag (`v*`): Java 17 and Java 21.
+更多构建、CI 和验证说明见 [开发指南](docs/development.md)。
 
-## Language & Conventions
+## 3. 强制约束
 
-- Java 17 (switch expressions, records, sealed classes are fine)
-- No Lombok, no annotation processing — plain Java POJOs
-- All code is in the default package hierarchy under `src/main/java/` (no top-level package prefix like `com.example`)
-- Comments and commit messages are in Chinese
-- i18n: all user-facing strings go through `I18n.getInstance().text(area, key)` with `.properties` files under `src/main/resources/i18n/{en,zh}/`. Language auto-detected from system timezone/locale.
+- 使用 Java 17；不引入 Lombok 或注解处理器，模型保持普通 Java POJO。
+- 保持现有包结构，不新增仓库级统一包名前缀。
+- 注释和提交信息使用中文。
+- 所有用户可见文本必须通过 `I18n.getInstance().text(area, key)` 获取，并同步维护 `src/main/resources/i18n/en/` 与 `zh/`。
+- Swing 组件更新必须在 EDT 中执行；后台重放、扫描和 Diff 不得阻塞 EDT。
+- 网络安全测试能力仅用于合法授权环境。
 
-## Architecture
+## 4. 文档索引
 
-### Entry Point & Wiring
-
-`AuthKit.java` implements `BurpExtension` and acts as the composition root — it wires all services, models, and UI panels together in `initialize()`. There is no DI framework; all dependencies are manually constructed and connected via callbacks/listeners.
-
-### Core Flow
-
-1. **HttpRequestHandler** — Montoya `HttpHandler` that intercepts responses, applies `ConfigModel` filters (domain, method, path, status code, extension, tool scope), and forwards matching requests to a callback
-2. **AuthController** — Central coordinator. Receives captured requests, deduplicates by method+URL, builds `CompareSampleModel` with Original/Unauthorized/per-user replayed responses
-3. **RequestReplayService** — Replays requests: strips auth headers for Unauthorized, runs through `ProcessorChain` for user-role replays
-4. **ProcessorChain** — Chain-of-responsibility over `RequestProcessor` implementations:
-   - `HeaderReplaceProcessor` — replaces/adds auth headers per user config
-   - `ParamReplaceProcessor` — replaces URL/body parameters per user config
-5. **RankService** — Weighted scoring (StatusCode 30%, Length 30%, Hash 25%, Attributes 15%) comparing each replayed response against Original. Score 0-100; higher = more likely authorization bypass
-
-### Models
-
-- `ConfigModel` — Plugin-wide settings (enabled, domain/method/path/status filters, tool scope, auth headers, extension blacklist)
-- `AuthUserModel` — Per-user auth config (headers to inject, params to replace)
-- `CompareSampleModel` — One request's full comparison: maps auth-object names ("Original", "Unauthorized", user names) to `MessageDataModel`
-- `MessageDataModel` — Single request-response pair with metadata (status, length, hash, attributeCount, rank, contentType)
-
-### UI Layer (Swing)
-
-`MainPanel` is the Burp Suite tab root, split left/right:
-- **Left**: `ToolbarPanel` (filter controls) + `DataTablePanel` (results grid) + `MetadataTablePanel` (detail pivot)
-- **Right tabs**: `ComparePanel` (source/target message viewers + diff), `ConfigurationPanel`, `UserPanel`, `JwtPanel`
-
-User add/remove/rename in `UserPanel` propagates to DataTable columns, MetadataTable rows, and ComparePanel tabs via event callbacks in `MainPanel.bindEvents()`.
-
-### Additional Features
-
-- **FakeIpService** — Generates random IP headers (X-Forwarded-For, etc.) for Intruder payloads and request injection
-- **Bypass403PayloadService** — Generates URL/header variants for 403 bypass scanning; results shown in `Bypass403ScanDialog`
-- **JwtEditorTab / JwtPanel** — JWT decode/display in Burp's request editor
-- **AuthContextMenuProvider** — Right-click menu: "Send to AuthKit", "Extract Auth to User", "Fake IP" actions, "403 Bypass Scan"
-- **AuthResultExportService** — Export results to CSV/HTML
-
-### Threading
-
-- `executor` (3 threads) — request replay and context menu processing
-- `diffExecutor` (1 daemon thread) — debounced diff computation (180ms debounce)
-- All UI updates go through `SwingUtilities.invokeLater()`
-
-### Utilities
-
-- `ApiUtils` — Singleton accessor for Montoya API instance
-- `LogUtils` — Logging wrapper around Montoya logging API
-- `I18n` — Singleton i18n with runtime language switching and listener support
+- [文档导航](docs/README.md)
+- [架构说明](docs/architecture.md)
+- [开发指南](docs/development.md)
+- [用户使用说明](README.md)
+- [历史设计与实施记录](docs/superpowers/)
