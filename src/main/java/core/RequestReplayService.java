@@ -7,6 +7,7 @@ import burp.api.montoya.http.message.responses.HttpResponse;
 import core.processor.ProcessorChain;
 import model.AuthUserModel;
 import model.MessageDataModel;
+import utils.HttpHeaderUtils;
 
 import java.util.List;
 
@@ -45,16 +46,15 @@ public class RequestReplayService {
 
     /**
      * 以未授权方式重放请求（移除所有认证头后发送）
+     * <p>
+     * 先按关键字模糊匹配移除常见鉴权头，再移除配置中指定的自定义头名称。
      *
      * @param originalRequest 原始请求
-     * @param authHeaders     需要移除的认证头名称列表
+     * @param authHeaders     需要额外移除的认证头名称列表（可为空）
      * @return 请求响应对
      */
     public HttpRequestResponse replayUnauthorized(HttpRequest originalRequest, List<String> authHeaders) {
-        HttpRequest current = originalRequest;
-        for (String headerName : authHeaders) {
-            current = current.withRemovedHeader(headerName);
-        }
+        HttpRequest current = HttpHeaderUtils.removeAuthHeaders(originalRequest, authHeaders);
         return http.sendRequest(current);
     }
 

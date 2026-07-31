@@ -2,10 +2,13 @@ package utils;
 
 import burp.api.montoya.http.message.HttpHeader;
 import burp.api.montoya.http.message.HttpRequestResponse;
+import burp.api.montoya.http.message.params.HttpParameterType;
+import burp.api.montoya.http.message.params.ParsedHttpParameter;
 import burp.api.montoya.http.message.requests.HttpRequest;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * HTTP 请求头工具类（纯函数，无状态）
@@ -37,9 +40,34 @@ public final class HttpHeaderUtils {
         if (headerName == null || headerName.isEmpty()) {
             return false;
         }
-        String lowerName = headerName.toLowerCase();
+        String lowerName = headerName.toLowerCase(Locale.ROOT);
         for (String keyword : AUTH_HEADER_KEYWORDS) {
             if (lowerName.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 判断请求头名称是否命中配置中的认证头关键字（模糊匹配）
+     *
+     * @param headerName             请求头名称
+     * @param authHeaderNameKeywords 配置中的认证头名称关键字
+     * @return 包含任一配置关键字则返回 true
+     */
+    public static boolean isConfiguredAuthHeader(String headerName, List<String> authHeaderNameKeywords) {
+        if (headerName == null || headerName.isEmpty()
+                || authHeaderNameKeywords == null || authHeaderNameKeywords.isEmpty()) {
+            return false;
+        }
+
+        String lowerName = headerName.toLowerCase(Locale.ROOT);
+        for (String keyword : authHeaderNameKeywords) {
+            if (keyword == null || keyword.isBlank()) {
+                continue;
+            }
+            if (lowerName.contains(keyword.trim().toLowerCase(Locale.ROOT))) {
                 return true;
             }
         }
@@ -114,13 +142,30 @@ public final class HttpHeaderUtils {
      * @return 移除所有鉴权头后的新 HttpRequest 对象
      */
     public static HttpRequest removeAuthHeaders(HttpRequest original) {
+        return removeAuthHeaders(original, List.of());
+    }
+
+    /**
+     * 删除请求中的所有鉴权头，并额外按配置关键字模糊移除请求头
+     *
+     * @param original               原始请求
+     * @param authHeaderNameKeywords 配置中的认证头名称关键字（可为空）
+     * @return 移除所有鉴权头后的新 HttpRequest 对象
+     */
+    public static HttpRequest removeAuthHeaders(HttpRequest original, List<String> authHeaderNameKeywords) {
         List<HttpHeader> toRemove = new ArrayList<>();
         for (HttpHeader header : original.headers()) {
-            if (isAuthHeader(header.name())) {
+            if (isAuthHeader(header.name()) || isConfiguredAuthHeader(header.name(), authHeaderNameKeywords)) {
                 toRemove.add(header);
             }
         }
-        return toRemove.isEmpty() ? original : original.withRemovedHeaders(toRemove);
+
+        HttpRequest current = toRemove.isEmpty() ? original : original.withRemovedHeaders(toRemove);
+        List<ParsedHttpParameter> cookieParameters = original.parameters(HttpParameterType.COOKIE);
+        if (cookieParameters != null && !cookieParameters.isEmpty()) {
+            current = current.withRemovedParameters(cookieParameters);
+        }
+        return current;
     }
 
     /**

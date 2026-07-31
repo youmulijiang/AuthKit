@@ -7,6 +7,7 @@ import burp.api.montoya.ui.contextmenu.ContextMenuEvent;
 import burp.api.montoya.ui.contextmenu.ContextMenuItemsProvider;
 import burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse;
 import core.FakeIpService;
+import utils.HttpHeaderUtils;
 import utils.I18n;
 
 import javax.swing.*;
@@ -412,13 +413,7 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
      * @return 移除所有鉴权头后的新 HttpRequest 对象
      */
     public static HttpRequest removeAuthHeaders(HttpRequest original) {
-        List<HttpHeader> toRemove = new ArrayList<>();
-        for (HttpHeader header : original.headers()) {
-            if (isAuthHeader(header.name())) {
-                toRemove.add(header);
-            }
-        }
-        return toRemove.isEmpty() ? original : original.withRemovedHeaders(toRemove);
+        return HttpHeaderUtils.removeAuthHeaders(original);
     }
 
     private void handleCustomFakeIp(ContextMenuEvent event, List<HttpRequestResponse> selectedItems) {
