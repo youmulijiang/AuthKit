@@ -46,6 +46,27 @@ class ComparePanelTest {
 
             targetPanel.setSelectedTabIndex(MessagePanel.REQUEST_TAB_INDEX);
             assertEquals(MessagePanel.REQUEST_TAB_INDEX, sourcePanel.getSelectedTabIndex());
+
+            sourcePanel.setSelectedTabIndex(MessagePanel.COMBINED_TAB_INDEX);
+            assertEquals(MessagePanel.COMBINED_TAB_INDEX, targetPanel.getSelectedTabIndex());
+        });
+    }
+
+    @Test
+    @DisplayName("MessagePanel 应包含 Request/Response/组合 三个页签，组合页为水平分割")
+    void messagePanel_shouldContainCombinedHorizontalSplitTab() throws Exception {
+        ComparePanel comparePanel = createComparePanel();
+
+        SwingUtilities.invokeAndWait(() -> {
+            MessagePanel panel = comparePanel.getSelectedSourcePanel();
+            JTabbedPane tabs = panel.getTabbedMessage();
+
+            assertEquals(3, tabs.getTabCount());
+            assertEquals(I18n.getInstance().text("message", "tab.request"), tabs.getTitleAt(0));
+            assertEquals(I18n.getInstance().text("message", "tab.response"), tabs.getTitleAt(1));
+            assertEquals(I18n.getInstance().text("message", "tab.combined"), tabs.getTitleAt(2));
+            assertSame(panel.getSplitCombined(), tabs.getComponentAt(MessagePanel.COMBINED_TAB_INDEX));
+            assertEquals(JSplitPane.HORIZONTAL_SPLIT, panel.getSplitCombined().getOrientation());
         });
     }
 

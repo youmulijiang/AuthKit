@@ -135,17 +135,15 @@ public class DiffController {
 
             String sourceName = panel.getSelectedSourceName();
             String targetName = panel.getSelectedTargetName();
-            int tabIndex = sourcePanel.getSelectedTabIndex();
-            String tabType = tabIndex == MessagePanel.REQUEST_TAB_INDEX
-                    ? i18n.text("message", "tab.request")
-                    : i18n.text("message", "tab.response");
+            MessagePanel.MessageView view = sourcePanel.getSelectedView();
+            String tabType = switch (view) {
+                case REQUEST -> i18n.text("message", "tab.request");
+                case RESPONSE -> i18n.text("message", "tab.response");
+                case COMBINED -> i18n.text("message", "tab.combined");
+            };
 
-            String sourceText = tabIndex == MessagePanel.REQUEST_TAB_INDEX
-                    ? sourcePanel.getRequestText()
-                    : sourcePanel.getResponseText();
-            String targetText = tabIndex == MessagePanel.REQUEST_TAB_INDEX
-                    ? targetPanel.getRequestText()
-                    : targetPanel.getResponseText();
+            String sourceText = sourcePanel.getSelectedText();
+            String targetText = targetPanel.getSelectedText();
 
             pendingContextRef.set(new DiffContext(
                     requestVersion.incrementAndGet(),

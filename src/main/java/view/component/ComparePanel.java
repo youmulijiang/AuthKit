@@ -12,7 +12,7 @@ import java.util.Map;
  * 报文对比面板
  * 位于右侧，包含三个区域（垂直三分）：
  * 1. 选择区 (Source) - 外层 JTabbedPane 选项卡为鉴权对象（Original / Unauthorized / User1 ...），
- *    每个选项卡内嵌一个 MessagePanel（含 Request / Response 两个 Tab）。
+ *    每个选项卡内嵌一个 MessagePanel（含 Request / Response / Request&lt;-&gt;Response 三个 Tab）。
  * 2. 被选择区 (Target) - 结构与选择区相同，用于选择被比较的鉴权对象。
  * 3. Diff 展示区 - 自动对比，含进度条和 JEditorPane（HTML）展示比较结果，支持颜色高亮。
  */
