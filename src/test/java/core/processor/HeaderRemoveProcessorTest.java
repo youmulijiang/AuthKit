@@ -1,6 +1,7 @@
 package core.processor;
 
 import burp.api.montoya.http.message.HttpHeader;
+import burp.api.montoya.http.message.params.HttpParameterType;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import model.AuthUserModel;
 import model.ConfigModel;
@@ -15,7 +16,7 @@ import static org.mockito.Mockito.*;
 
 /**
  * HeaderRemoveProcessor 单元测试
- * 该处理器用于未授权场景，移除常见鉴权头及 ConfigModel 中配置的认证头。
+ * 该处理器用于未授权场景，按内置关键字和配置关键字的并集移除鉴权头，不区分大小写。
  */
 class HeaderRemoveProcessorTest {
 
@@ -37,14 +38,15 @@ class HeaderRemoveProcessorTest {
     }
 
     @Test
-    @DisplayName("process 应按关键字移除鉴权头并移除配置中的自定义头")
-    void process_shouldRemoveKeywordAndConfiguredHeaders() {
+    @DisplayName("process 配置非空时应同时移除内置关键字和配置匹配的认证头")
+    void process_shouldRemoveBothBuiltInAndConfiguredHeaders() {
         HttpRequest original = mock(HttpRequest.class);
         HttpHeader cookie = mock(HttpHeader.class);
         when(cookie.name()).thenReturn("Cookie");
         HttpHeader customAuth = mock(HttpHeader.class);
         when(customAuth.name()).thenReturn("X-Custom-Auth");
         when(original.headers()).thenReturn(List.of(cookie, customAuth));
+        when(original.parameters(HttpParameterType.COOKIE)).thenReturn(List.of());
 
         HttpRequest afterRemove = mock(HttpRequest.class);
         when(original.withRemovedHeaders(List.of(cookie, customAuth))).thenReturn(afterRemove);
@@ -63,6 +65,7 @@ class HeaderRemoveProcessorTest {
         HttpHeader customAuth = mock(HttpHeader.class);
         when(customAuth.name()).thenReturn("X-Custom-Auth-Token");
         when(original.headers()).thenReturn(List.of(customAuth));
+        when(original.parameters(HttpParameterType.COOKIE)).thenReturn(List.of());
 
         HttpRequest afterRemove = mock(HttpRequest.class);
         when(original.withRemovedHeaders(List.of(customAuth))).thenReturn(afterRemove);
@@ -83,6 +86,7 @@ class HeaderRemoveProcessorTest {
 
         HttpRequest original = mock(HttpRequest.class);
         when(original.headers()).thenReturn(List.of());
+        when(original.parameters(HttpParameterType.COOKIE)).thenReturn(List.of());
         AuthUserModel user = new AuthUserModel("Unauthorized");
 
         HttpRequest result = emptyProcessor.process(original, user);

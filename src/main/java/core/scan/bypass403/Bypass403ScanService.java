@@ -1,12 +1,10 @@
-package core.service;
+package core.scan.bypass403;
 
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.RedirectionMode;
 import burp.api.montoya.http.RequestOptions;
 import burp.api.montoya.http.message.HttpRequestResponse;
-import core.Bypass403PayloadService;
-import core.Bypass403RequestVariant;
-import core.Bypass403ScanResult;
+
 import view.dialog.Bypass403ScanDialog;
 
 import javax.swing.*;

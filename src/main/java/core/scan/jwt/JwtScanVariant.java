@@ -1,4 +1,4 @@
-package core;
+package core.scan.jwt;
 
 import burp.api.montoya.http.message.requests.HttpRequest;
 

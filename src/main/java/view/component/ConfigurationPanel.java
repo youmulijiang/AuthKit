@@ -32,6 +32,7 @@ public class ConfigurationPanel extends JPanel {
 
     /** 禁用时文本框的背景色 */
     private static final Color DISABLED_BG = new Color(230, 230, 230);
+    private static final Color PLACEHOLDER_COLOR = new Color(155, 155, 155);
 
     // ===== 基础控制区 =====
     private final JCheckBox checkBoxEnabled;
@@ -63,7 +64,7 @@ public class ConfigurationPanel extends JPanel {
     private final JTextField textFieldExtensionBlacklist;
 
     // ===== 认证头配置 =====
-    private final JTextArea textAreaAuthHeaders;
+    private final PlaceholderTextArea textAreaAuthHeaders;
 
     private TitledBorder borderBasicControl;
     private TitledBorder borderDomainScope;
@@ -298,6 +299,7 @@ public class ConfigurationPanel extends JPanel {
         textAreaPath.setToolTipText(i18n.text("configuration", "tooltip.path"));
         textFieldExtensionBlacklist.setToolTipText(i18n.text("configuration", "tooltip.extensionBlacklist"));
         textAreaAuthHeaders.setToolTipText(i18n.text("configuration", "tooltip.authHeaders"));
+        textAreaAuthHeaders.setPlaceholder(i18n.text("configuration", "placeholder.authHeaders"));
 
         refreshMetricOptions();
         syncingLanguageSelection = true;
@@ -472,7 +474,7 @@ public class ConfigurationPanel extends JPanel {
         private final JTextField textFieldStatusCode;
         private final JCheckBox checkBoxExtensionFilter;
         private final JTextField textFieldExtensionBlacklist;
-        private final JTextArea textAreaAuthHeaders;
+        private final PlaceholderTextArea textAreaAuthHeaders;
         private final JCheckBox checkBoxUnauthorizedOnly;
 
         public Builder() {
@@ -505,8 +507,11 @@ public class ConfigurationPanel extends JPanel {
             this.checkBoxExtensionFilter = new JCheckBox("", true);
             this.textFieldExtensionBlacklist = new JTextField(model.ConfigModel.DEFAULT_EXTENSION_BLACKLIST);
 
-            this.textAreaAuthHeaders = new JTextArea("Cookie\nAuthorization\nToken");
+            this.textAreaAuthHeaders = new PlaceholderTextArea();
             this.textAreaAuthHeaders.setFont(monoFont);
+            this.textAreaAuthHeaders.setPlaceholderColor(PLACEHOLDER_COLOR);
+            this.textAreaAuthHeaders.setLineWrap(true);
+            this.textAreaAuthHeaders.setWrapStyleWord(true);
 
             this.checkBoxUnauthorizedOnly = new JCheckBox("", false);
         }

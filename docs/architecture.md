@@ -8,9 +8,13 @@ AuthKit 是单模块 Maven 项目。`AuthKit.java` 实现 Montoya `BurpExtension
 src/main/java/
 ├── AuthKit.java          # 扩展入口与对象装配
 ├── controller/           # 流程编排、界面事件协调
-├── core/                 # 重放、评分、Diff、Payload 等核心能力
+├── core/                 # 重放、评分、Diff 等核心能力
 │   ├── processor/        # 请求修改责任链
-│   └── service/          # 过滤、历史记录和专项扫描
+│   ├── scan/             # 专项扫描（按能力分包）
+│   │   ├── idor/         # IDOR payload / 执行 / 结果模型
+│   │   ├── bypass403/    # 403 绕过 payload / 执行 / 结果模型
+│   │   └── jwt/          # JWT payload / 执行 / 结果模型
+│   └── service/          # 公共领域服务（过滤、历史记录等）
 ├── model/                # 配置、用户和比较结果模型
 ├── view/                 # Burp/Swing 界面
 │   ├── binding/          # UI 与模型绑定
@@ -66,9 +70,9 @@ Burp HTTP 响应
 | --- | --- |
 | CSV/HTML 导出 | `AuthResultExportService` |
 | Fake IP 注入与 Intruder Payload | `FakeIpService`、`FakeIpIntruderHttpHandler`、`FakeIpPayloadGeneratorProvider` |
-| 403 绕过扫描 | `Bypass403PayloadService`、`Bypass403ScanService`、`Bypass403ScanDialog` |
-| IDOR 扫描 | `IdorPayloadService`、`IdorScanService`、`IdorScanDialog` |
-| JWT 查看与扫描 | `JwtEditorTab`、`JwtPanel`、`JwtPayloadService`、`JwtScanService` |
+| 403 绕过扫描 | `core.scan.bypass403.*`、`Bypass403ScanDialog` |
+| IDOR 扫描 | `core.scan.idor.*`、`IdorScanDialog` |
+| JWT 查看与扫描 | `JwtEditorTab`、`JwtPanel`、`core.scan.jwt.*` |
 | 文本差异 | `TextDiffService`、`ComparePanel` |
 
 ## 6. 并发边界

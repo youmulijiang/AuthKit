@@ -1,13 +1,11 @@
-package core.service;
+package core.scan.jwt;
 
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.RedirectionMode;
 import burp.api.montoya.http.RequestOptions;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.responses.HttpResponse;
-import core.JwtPayloadService;
-import core.JwtScanResult;
-import core.JwtScanVariant;
+
 import view.dialog.JwtScanDialog;
 
 import javax.swing.*;

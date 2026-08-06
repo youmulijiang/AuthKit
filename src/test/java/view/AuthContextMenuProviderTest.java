@@ -104,6 +104,64 @@ class AuthContextMenuProviderTest {
     }
 
     @Test
+    @DisplayName("Fake IP 本地 IP 菜单应把普通选中请求加头后发送到 Repeater")
+    void fakeIpLocalMenu_shouldSendSelectedRequestToRepeater() {
+        I18n i18n = I18n.getInstance();
+        I18n.Language originalLanguage = i18n.getCurrentLanguage();
+        i18n.setLanguage(I18n.Language.ENGLISH);
+        try {
+            HttpRequest request = mockFakeIpRequest(FakeIpService.LOCALHOST_IP);
+            HttpRequestResponse reqResp = mock(HttpRequestResponse.class);
+            when(reqResp.request()).thenReturn(request);
+            ContextMenuEvent event = mock(ContextMenuEvent.class);
+            when(event.selectedRequestResponses()).thenReturn(List.of(reqResp));
+            when(event.messageEditorRequestResponse()).thenReturn(Optional.empty());
+            List<HttpRequest> repeaterRequests = new ArrayList<>();
+            AuthContextMenuProvider provider = new AuthContextMenuProvider(
+                    List::of, () -> true, () -> {}, items -> {}, (auth, user) -> {}, auth -> null,
+                    new FakeIpService(), repeaterRequests::add, request1 -> {});
+
+            JMenu fakeIpMenu = findMenu(provider.provideMenuItems(event), "Fake IP");
+            ((JMenuItem) fakeIpMenu.getMenuComponent(1)).doClick();
+
+            verify(request).withAddedHeader("X-Forwarded-For", FakeIpService.LOCALHOST_IP);
+            assertEquals(List.of(request), repeaterRequests);
+        } finally {
+            i18n.setLanguage(originalLanguage);
+        }
+    }
+
+    @Test
+    @DisplayName("Fake IP 菜单在同时存在选中项和编辑器上下文时应优先处理选中请求")
+    void fakeIpLocalMenu_shouldPreferSelectedRequestResponsesOverEditorContext() {
+        I18n i18n = I18n.getInstance();
+        I18n.Language originalLanguage = i18n.getCurrentLanguage();
+        i18n.setLanguage(I18n.Language.ENGLISH);
+        try {
+            HttpRequest selectedRequest = mockFakeIpRequest(FakeIpService.LOCALHOST_IP);
+            HttpRequest editorRequest = mockFakeIpRequest(FakeIpService.LOCALHOST_IP);
+            HttpRequestResponse selectedReqResp = mock(HttpRequestResponse.class);
+            when(selectedReqResp.request()).thenReturn(selectedRequest);
+            MessageEditorHttpRequestResponse editorContext = mockEditorContext(editorRequest);
+            ContextMenuEvent event = mockContextMenuEvent(editorContext);
+            when(event.selectedRequestResponses()).thenReturn(List.of(selectedReqResp));
+            List<HttpRequest> repeaterRequests = new ArrayList<>();
+            AuthContextMenuProvider provider = new AuthContextMenuProvider(
+                    List::of, () -> true, () -> {}, items -> {}, (auth, user) -> {}, auth -> null,
+                    new FakeIpService(), repeaterRequests::add, request1 -> {});
+
+            JMenu fakeIpMenu = findMenu(provider.provideMenuItems(event), "Fake IP");
+            ((JMenuItem) fakeIpMenu.getMenuComponent(1)).doClick();
+
+            verify(selectedRequest).withAddedHeader("X-Forwarded-For", FakeIpService.LOCALHOST_IP);
+            assertEquals(List.of(selectedRequest), repeaterRequests);
+            verify(editorContext, org.mockito.Mockito.never()).setRequest(editorRequest);
+        } finally {
+            i18n.setLanguage(originalLanguage);
+        }
+    }
+
+    @Test
     @DisplayName("Fake IP 菜单应支持中文翻译")
     void fakeIpMenu_shouldTranslateChinese() {
         I18n i18n = I18n.getInstance();
@@ -172,6 +230,41 @@ class AuthContextMenuProviderTest {
             jwtItem.doClick();
 
             assertEquals(List.of(reqResp), scanned);
+        } finally {
+            i18n.setLanguage(originalLanguage);
+        }
+    }
+
+    @Test
+    @DisplayName("Extract Auth 菜单应同时提取内置关键字和配置面板认证头")
+    void extractMenu_shouldExtractBothBuiltInAndConfiguredAuthHeaders() {
+        I18n i18n = I18n.getInstance();
+        I18n.Language originalLanguage = i18n.getCurrentLanguage();
+        i18n.setLanguage(I18n.Language.ENGLISH);
+        try {
+            HttpRequestResponse reqResp = mock(HttpRequestResponse.class);
+            HttpRequest request = mock(HttpRequest.class);
+            burp.api.montoya.http.message.HttpHeader cookie = mock(burp.api.montoya.http.message.HttpHeader.class);
+            burp.api.montoya.http.message.HttpHeader custom = mock(burp.api.montoya.http.message.HttpHeader.class);
+            when(reqResp.request()).thenReturn(request);
+            when(cookie.name()).thenReturn("Cookie");
+            when(cookie.value()).thenReturn("sid=abc");
+            when(custom.name()).thenReturn("X-AuthKit-Session");
+            when(custom.value()).thenReturn("custom");
+            when(request.headers()).thenReturn(List.of(cookie, custom));
+            MessageEditorHttpRequestResponse editorContext = mockEditorContext(request);
+            when(editorContext.requestResponse()).thenReturn(reqResp);
+
+            List<String> extracted = new ArrayList<>();
+            AuthContextMenuProvider provider = new AuthContextMenuProvider(
+                    () -> List.of("User1"), () -> true, () -> {}, items -> {},
+                    (auth, user) -> extracted.add(user + "=" + auth), auth -> null,
+                    () -> List.of("AuthKit"), new FakeIpService(), request1 -> {}, request1 -> {});
+
+            JMenu extractMenu = findMenu(provider.provideMenuItems(mockContextMenuEvent(editorContext)), "Extract Auth to User");
+            ((JMenuItem) extractMenu.getMenuComponent(0)).doClick();
+
+            assertEquals(List.of("User1=Cookie: sid=abc\nX-AuthKit-Session: custom"), extracted);
         } finally {
             i18n.setLanguage(originalLanguage);
         }

@@ -61,8 +61,9 @@ User add/remove/rename in `UserPanel` propagates to DataTable columns, MetadataT
 ### Additional Features
 
 - **FakeIpService** — Generates random IP headers (X-Forwarded-For, etc.) for Intruder payloads and request injection
-- **Bypass403PayloadService** — Generates URL/header variants for 403 bypass scanning; results shown in `Bypass403ScanDialog`
-- **JwtEditorTab / JwtPanel** — JWT decode/display in Burp's request editor
+- **core.scan.bypass403** — 403 bypass payload generation and scan execution; results shown in `Bypass403ScanDialog`
+- **core.scan.idor** — IDOR payload generation and scan execution; results shown in `IdorScanDialog`
+- **core.scan.jwt** — JWT active-scan payload generation and execution; UI in `JwtEditorTab` / `JwtPanel` / `JwtScanDialog`
 - **AuthContextMenuProvider** — Right-click menu: "Send to AuthKit", "Extract Auth to User", "Fake IP" actions, "403 Bypass Scan"
 - **AuthResultExportService** — Export results to CSV/HTML
 

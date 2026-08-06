@@ -9,7 +9,7 @@ import java.util.List;
 
 /**
  * 认证头移除处理器
- * 用于未授权场景：先按关键字移除常见鉴权头，再移除 ConfigModel 中配置的自定义认证头。
+ * 用于未授权场景：配置非空时只按配置移除，配置为空时回退到内置鉴权头关键字。
  */
 public class HeaderRemoveProcessor implements RequestProcessor {
 
@@ -33,7 +33,7 @@ public class HeaderRemoveProcessor implements RequestProcessor {
     }
 
     /**
-     * 移除常见鉴权头及配置中指定的认证头
+     * 按配置或默认规则移除认证头
      */
     @Override
     public HttpRequest process(HttpRequest request, AuthUserModel user) {

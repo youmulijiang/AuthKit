@@ -4,16 +4,16 @@ import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;
-import core.Bypass403PayloadService;
 import core.FakeIpService;
 import core.HashService;
-import core.IdorPayloadService;
-import core.JwtPayloadService;
 import core.RequestReplayService;
+import core.scan.bypass403.Bypass403PayloadService;
+import core.scan.bypass403.Bypass403ScanService;
+import core.scan.idor.IdorPayloadService;
+import core.scan.idor.IdorScanService;
+import core.scan.jwt.JwtPayloadService;
+import core.scan.jwt.JwtScanService;
 import core.service.AuthHistoryService;
-import core.service.Bypass403ScanService;
-import core.service.IdorScanService;
-import core.service.JwtScanService;
 import model.AuthUserModel;
 import model.MessageDataModel;
 import utils.LogUtils;
@@ -142,6 +142,8 @@ public class ContextMenuController {
         // 插件启用状态提供者
         java.util.function.Supplier<Boolean> enabledSupplier =
                 () -> mainPanel.getPanelConfiguration().getCheckBoxEnabled().isSelected();
+        java.util.function.Supplier<List<String>> authHeaderKeywordsSupplier =
+                () -> controller.getConfigModel().getAuthHeaders();
 
         // 开启插件的回调：点击勾选框触发 doClick，等效于用户手动勾选 Enable Plugin
         Runnable enablePluginHandler = () -> {
@@ -187,11 +189,12 @@ public class ContextMenuController {
         // 删除所有鉴权字段回调
         java.util.function.BiConsumer<burp.api.montoya.ui.contextmenu.ContextMenuEvent,
                 List<HttpRequestResponse>> deleteAuthHandler =
-                (event, items) -> authHistoryService.deleteAuthFields(event, items);
+                (event, items) -> authHistoryService.deleteAuthFields(
+                        event, items, authHeaderKeywordsSupplier.get());
 
         AuthContextMenuProvider contextMenuProvider =
                 new AuthContextMenuProvider(userNamesSupplier, enabledSupplier, enablePluginHandler,
-                        sendHandler, extractHandler, createUserHandler, fakeIpService,
+                        sendHandler, extractHandler, createUserHandler, authHeaderKeywordsSupplier, fakeIpService,
                         sendToRepeaterHandler, sendToIntruderHandler, bypass403ScanHandler,
                         updateToLatestAuthHandler, selectFromHistoryHandler, deleteAuthHandler);
         contextMenuProvider.setIdorScanHandler(idorScanHandler);

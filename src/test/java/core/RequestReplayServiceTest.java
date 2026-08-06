@@ -3,6 +3,7 @@ package core;
 import burp.api.montoya.http.Http;
 import burp.api.montoya.http.message.HttpHeader;
 import burp.api.montoya.http.message.HttpRequestResponse;
+import burp.api.montoya.http.message.params.HttpParameterType;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import core.processor.ProcessorChain;
 import model.AuthUserModel;
@@ -57,6 +58,7 @@ class RequestReplayServiceTest {
         HttpHeader cookie = mock(HttpHeader.class);
         when(cookie.name()).thenReturn("Cookie");
         when(original.headers()).thenReturn(List.of(cookie));
+        when(original.parameters(HttpParameterType.COOKIE)).thenReturn(List.of());
 
         HttpRequest afterKeywordRemove = mock(HttpRequest.class);
         when(original.withRemovedHeaders(List.of(cookie))).thenReturn(afterKeywordRemove);
@@ -72,44 +74,48 @@ class RequestReplayServiceTest {
     }
 
     @Test
-    @DisplayName("replayUnauthorized 应额外移除配置中的自定义认证头")
-    void replayUnauthorized_shouldAlsoRemoveConfiguredHeaders() {
+    @DisplayName("replayUnauthorized 应同时移除内置关键字和配置匹配的认证头")
+    void replayUnauthorized_shouldRemoveBothBuiltInAndConfiguredHeaders() {
         HttpRequest original = mock(HttpRequest.class);
-        HttpHeader customAuth = mock(HttpHeader.class);
-        when(customAuth.name()).thenReturn("X-Custom-Auth");
-        when(original.headers()).thenReturn(List.of(customAuth));
+        HttpHeader authHeader = mock(HttpHeader.class);
+        HttpHeader customHeader = mock(HttpHeader.class);
+        when(authHeader.name()).thenReturn("Authorization");
+        when(customHeader.name()).thenReturn("X-MyApp-Id");
+        when(original.headers()).thenReturn(List.of(authHeader, customHeader));
+        when(original.parameters(HttpParameterType.COOKIE)).thenReturn(List.of());
 
-        HttpRequest afterCustom = mock(HttpRequest.class);
-        when(original.withRemovedHeaders(List.of(customAuth))).thenReturn(afterCustom);
+        HttpRequest afterRemove = mock(HttpRequest.class);
+        when(original.withRemovedHeaders(List.of(authHeader, customHeader))).thenReturn(afterRemove);
 
         HttpRequestResponse mockResponse = mock(HttpRequestResponse.class);
-        when(http.sendRequest(afterCustom)).thenReturn(mockResponse);
+        when(http.sendRequest(afterRemove)).thenReturn(mockResponse);
 
-        HttpRequestResponse result = service.replayUnauthorized(original, List.of("X-Custom-Auth"));
+        HttpRequestResponse result = service.replayUnauthorized(original, List.of("MyApp"));
 
         assertSame(mockResponse, result);
-        verify(original).withRemovedHeaders(List.of(customAuth));
-        verify(http).sendRequest(afterCustom);
+        verify(original).withRemovedHeaders(List.of(authHeader, customHeader));
+        verify(http).sendRequest(afterRemove);
     }
 
     @Test
     @DisplayName("replayUnauthorized 应按配置关键字包含匹配移除请求头")
     void replayUnauthorized_shouldRemoveHeadersContainingConfiguredKeyword() {
         HttpRequest original = mock(HttpRequest.class);
-        HttpHeader customAuth = mock(HttpHeader.class);
-        when(customAuth.name()).thenReturn("X-Custom-Auth-Token");
-        when(original.headers()).thenReturn(List.of(customAuth));
+        HttpHeader customHeader = mock(HttpHeader.class);
+        when(customHeader.name()).thenReturn("X-MyApp-Id");
+        when(original.headers()).thenReturn(List.of(customHeader));
+        when(original.parameters(HttpParameterType.COOKIE)).thenReturn(List.of());
 
         HttpRequest afterCustom = mock(HttpRequest.class);
-        when(original.withRemovedHeaders(List.of(customAuth))).thenReturn(afterCustom);
+        when(original.withRemovedHeaders(List.of(customHeader))).thenReturn(afterCustom);
 
         HttpRequestResponse mockResponse = mock(HttpRequestResponse.class);
         when(http.sendRequest(afterCustom)).thenReturn(mockResponse);
 
-        HttpRequestResponse result = service.replayUnauthorized(original, List.of("custom-auth"));
+        HttpRequestResponse result = service.replayUnauthorized(original, List.of("myapp"));
 
         assertSame(mockResponse, result);
-        verify(original).withRemovedHeaders(List.of(customAuth));
+        verify(original).withRemovedHeaders(List.of(customHeader));
         verify(http).sendRequest(afterCustom);
     }
 
@@ -118,6 +124,7 @@ class RequestReplayServiceTest {
     void replayUnauthorized_noAuthHeaders_shouldSendOriginal() {
         HttpRequest original = mock(HttpRequest.class);
         when(original.headers()).thenReturn(List.of());
+        when(original.parameters(HttpParameterType.COOKIE)).thenReturn(List.of());
         HttpRequestResponse mockResponse = mock(HttpRequestResponse.class);
         when(http.sendRequest(original)).thenReturn(mockResponse);
 

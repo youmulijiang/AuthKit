@@ -1,13 +1,11 @@
-package core.service;
+package core.scan.idor;
 
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;
 import burp.api.montoya.proxy.ProxyHttpRequestResponse;
-import core.IdorPayloadService;
-import core.IdorScanResult;
-import core.IdorScanVariant;
+
 import utils.LogUtils;
 import view.dialog.IdorScanDialog;
 
@@ -64,11 +62,15 @@ public class IdorScanService {
                     ? baseResponse.bodyToString() : "";
             final int originalHash = originalBody.hashCode();
 
-            // 获取代理历史供历史参数策略使用
+            // 优先获取代理历史供历史参数和路径策略使用，代理历史为空时再回退到 sitemap。
             List<ProxyHttpRequestResponse> history = montoyaApi.proxy().history();
+            List<HttpRequestResponse> siteMapItems = List.of();
+            if (history == null || history.isEmpty()) {
+                siteMapItems = montoyaApi.siteMap().requestResponses();
+            }
 
             // 生成所有 IDOR 变体
-            List<IdorScanVariant> variants = payloadService.generateVariants(baseRequest, history);
+            List<IdorScanVariant> variants = payloadService.generateVariants(baseRequest, history, siteMapItems);
             if (stopRequested.get()) return;
 
             final int totalCount = variants.size();

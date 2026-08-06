@@ -1,4 +1,4 @@
-package core;
+package core.scan.bypass403;
 
 import burp.api.montoya.http.message.requests.HttpRequest;
 import org.junit.jupiter.api.DisplayName;

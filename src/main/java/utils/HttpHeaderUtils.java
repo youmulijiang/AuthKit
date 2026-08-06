@@ -81,14 +81,28 @@ public final class HttpHeaderUtils {
      * @return 提取到的鉴权头文本，未找到返回空字符串
      */
     public static String extractAuthHeaders(List<HttpRequestResponse> selectedItems) {
+        return extractAuthHeaders(selectedItems, List.of());
+    }
+
+    /**
+     * 从选中的请求列表中提取所有鉴权头文本（每行一条，格式：Name: Value）。
+     * 配置为空时使用内置默认关键字；配置非空时只使用配置关键字。
+     *
+     * @param selectedItems          请求响应列表
+     * @param authHeaderNameKeywords 配置中的认证头名称关键字（可为空）
+     * @return 提取到的鉴权头文本，未找到返回空字符串
+     */
+    public static String extractAuthHeaders(List<HttpRequestResponse> selectedItems,
+                                            List<String> authHeaderNameKeywords) {
         StringBuilder sb = new StringBuilder();
+        boolean useConfiguredOnly = hasConfiguredAuthHeaders(authHeaderNameKeywords);
         for (HttpRequestResponse reqResp : selectedItems) {
             HttpRequest request = reqResp.request();
             if (request == null) {
                 continue;
             }
             for (HttpHeader header : request.headers()) {
-                if (isAuthHeader(header.name())) {
+                if (shouldHandleAuthHeader(header.name(), authHeaderNameKeywords, useConfiguredOnly)) {
                     sb.append(header.name()).append(": ").append(header.value()).append("\n");
                 }
             }
@@ -146,7 +160,7 @@ public final class HttpHeaderUtils {
     }
 
     /**
-     * 删除请求中的所有鉴权头，并额外按配置关键字模糊移除请求头
+     * 删除请求中的鉴权头。配置为空时使用内置默认关键字，配置非空时只使用配置关键字。
      *
      * @param original               原始请求
      * @param authHeaderNameKeywords 配置中的认证头名称关键字（可为空）
@@ -154,18 +168,40 @@ public final class HttpHeaderUtils {
      */
     public static HttpRequest removeAuthHeaders(HttpRequest original, List<String> authHeaderNameKeywords) {
         List<HttpHeader> toRemove = new ArrayList<>();
+        boolean useConfiguredOnly = hasConfiguredAuthHeaders(authHeaderNameKeywords);
         for (HttpHeader header : original.headers()) {
-            if (isAuthHeader(header.name()) || isConfiguredAuthHeader(header.name(), authHeaderNameKeywords)) {
+            if (shouldHandleAuthHeader(header.name(), authHeaderNameKeywords, useConfiguredOnly)) {
                 toRemove.add(header);
             }
         }
 
         HttpRequest current = toRemove.isEmpty() ? original : original.withRemovedHeaders(toRemove);
-        List<ParsedHttpParameter> cookieParameters = original.parameters(HttpParameterType.COOKIE);
-        if (cookieParameters != null && !cookieParameters.isEmpty()) {
-            current = current.withRemovedParameters(cookieParameters);
+        if (shouldHandleAuthHeader("Cookie", authHeaderNameKeywords, useConfiguredOnly)) {
+            List<ParsedHttpParameter> cookieParameters = original.parameters(HttpParameterType.COOKIE);
+            if (cookieParameters != null && !cookieParameters.isEmpty()) {
+                current = current.withRemovedParameters(cookieParameters);
+            }
         }
         return current;
+    }
+
+    private static boolean shouldHandleAuthHeader(String headerName, List<String> authHeaderNameKeywords,
+                                                  boolean useConfiguredOnly) {
+        return useConfiguredOnly
+                ? isConfiguredAuthHeader(headerName, authHeaderNameKeywords)
+                : isAuthHeader(headerName);
+    }
+
+    private static boolean hasConfiguredAuthHeaders(List<String> authHeaderNameKeywords) {
+        if (authHeaderNameKeywords == null || authHeaderNameKeywords.isEmpty()) {
+            return false;
+        }
+        for (String keyword : authHeaderNameKeywords) {
+            if (keyword != null && !keyword.isBlank()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

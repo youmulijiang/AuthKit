@@ -7,6 +7,7 @@ import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.proxy.ProxyHttpRequestResponse;
 import burp.api.montoya.ui.contextmenu.ContextMenuEvent;
 import burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse;
+import utils.HttpHeaderUtils;
 import utils.I18n;
 import view.AuthContextMenuProvider;
 import view.dialog.AuthHistorySelectDialog;
@@ -131,24 +132,29 @@ public class AuthHistoryService {
     }
 
     /**
-     * 删除选中请求中的所有鉴权字段。
+     * 删除选中请求中的鉴权字段。配置非空时只按配置删除，配置为空时使用默认规则。
      * 若在编辑器上下文中，直接回写编辑器；否则发送到 Repeater。
+     * 显式选中的请求优先于编辑器上下文。
      */
-    public void deleteAuthFields(ContextMenuEvent event, List<HttpRequestResponse> items) {
+    public void deleteAuthFields(ContextMenuEvent event, List<HttpRequestResponse> items,
+                                 List<String> authHeaderNameKeywords) {
         if (items == null || items.isEmpty()) return;
         Optional<MessageEditorHttpRequestResponse> editorCtx =
                 event.messageEditorRequestResponse();
-        if (editorCtx.isPresent()) {
+        List<HttpRequestResponse> explicitSelectedItems = event.selectedRequestResponses();
+        boolean hasExplicitSelectedItems = explicitSelectedItems != null && !explicitSelectedItems.isEmpty();
+        if (!hasExplicitSelectedItems && editorCtx.isPresent()) {
             HttpRequest request =
                     editorCtx.get().requestResponse().request();
             if (request == null) return;
-            editorCtx.get().setRequest(AuthContextMenuProvider.removeAuthHeaders(request));
+            editorCtx.get().setRequest(HttpHeaderUtils.removeAuthHeaders(request, authHeaderNameKeywords));
         } else {
             for (HttpRequestResponse item : items) {
                 HttpRequest request = item.request();
                 if (request == null) continue;
                 montoyaApi.repeater().sendToRepeater(
-                        AuthContextMenuProvider.removeAuthHeaders(request), "AuthKit - Removed Auth");
+                        HttpHeaderUtils.removeAuthHeaders(request, authHeaderNameKeywords),
+                        "AuthKit - Removed Auth");
             }
         }
     }

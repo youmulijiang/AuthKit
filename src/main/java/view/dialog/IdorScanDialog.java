@@ -5,7 +5,7 @@ import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.ui.editor.EditorOptions;
 import burp.api.montoya.ui.editor.HttpRequestEditor;
 import burp.api.montoya.ui.editor.HttpResponseEditor;
-import core.IdorScanResult;
+import core.scan.idor.IdorScanResult;
 import utils.I18n;
 
 import javax.swing.*;

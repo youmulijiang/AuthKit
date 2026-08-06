@@ -47,6 +47,9 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
     /** 获取插件是否启用 */
     private final Supplier<Boolean> enabledSupplier;
 
+    /** 获取当前配置面板中的认证头关键字列表 */
+    private final Supplier<List<String>> authHeaderKeywordsSupplier;
+
     /** 开启插件的回调（用于弹窗中勾选后直接启用） */
     private final Runnable enablePluginHandler;
 
@@ -93,7 +96,7 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
                                     BiConsumer<String, String> extractHandler,
                                     Function<String, String> createUserHandler) {
         this(userNamesSupplier, enabledSupplier, enablePluginHandler, sendHandler, extractHandler,
-                createUserHandler, new FakeIpService(), request -> {}, request -> {}, items -> {});
+                createUserHandler, List::of, new FakeIpService(), request -> {}, request -> {}, items -> {});
     }
 
     public AuthContextMenuProvider(Supplier<List<String>> userNamesSupplier,
@@ -106,7 +109,22 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
                                     Consumer<HttpRequest> sendToRepeaterHandler,
                                     Consumer<HttpRequest> sendToIntruderHandler) {
         this(userNamesSupplier, enabledSupplier, enablePluginHandler, sendHandler, extractHandler,
-                createUserHandler, fakeIpService, sendToRepeaterHandler, sendToIntruderHandler, items -> {});
+                createUserHandler, List::of, fakeIpService, sendToRepeaterHandler, sendToIntruderHandler, items -> {});
+    }
+
+    public AuthContextMenuProvider(Supplier<List<String>> userNamesSupplier,
+                                    Supplier<Boolean> enabledSupplier,
+                                    Runnable enablePluginHandler,
+                                    Consumer<List<HttpRequestResponse>> sendHandler,
+                                    BiConsumer<String, String> extractHandler,
+                                    Function<String, String> createUserHandler,
+                                    Supplier<List<String>> authHeaderKeywordsSupplier,
+                                    FakeIpService fakeIpService,
+                                    Consumer<HttpRequest> sendToRepeaterHandler,
+                                    Consumer<HttpRequest> sendToIntruderHandler) {
+        this(userNamesSupplier, enabledSupplier, enablePluginHandler, sendHandler, extractHandler,
+                createUserHandler, authHeaderKeywordsSupplier, fakeIpService,
+                sendToRepeaterHandler, sendToIntruderHandler, items -> {});
     }
 
     public AuthContextMenuProvider(Supplier<List<String>> userNamesSupplier,
@@ -120,8 +138,24 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
                                     Consumer<HttpRequest> sendToIntruderHandler,
                                     Consumer<List<HttpRequestResponse>> bypass403ScanHandler) {
         this(userNamesSupplier, enabledSupplier, enablePluginHandler, sendHandler, extractHandler,
-                createUserHandler, fakeIpService, sendToRepeaterHandler, sendToIntruderHandler,
+                createUserHandler, List::of, fakeIpService, sendToRepeaterHandler, sendToIntruderHandler,
                 bypass403ScanHandler, (event, items) -> {}, (event, items) -> {});
+    }
+
+    public AuthContextMenuProvider(Supplier<List<String>> userNamesSupplier,
+                                    Supplier<Boolean> enabledSupplier,
+                                    Runnable enablePluginHandler,
+                                    Consumer<List<HttpRequestResponse>> sendHandler,
+                                    BiConsumer<String, String> extractHandler,
+                                    Function<String, String> createUserHandler,
+                                    Supplier<List<String>> authHeaderKeywordsSupplier,
+                                    FakeIpService fakeIpService,
+                                    Consumer<HttpRequest> sendToRepeaterHandler,
+                                    Consumer<HttpRequest> sendToIntruderHandler,
+                                    Consumer<List<HttpRequestResponse>> bypass403ScanHandler) {
+        this(userNamesSupplier, enabledSupplier, enablePluginHandler, sendHandler, extractHandler,
+                createUserHandler, authHeaderKeywordsSupplier, fakeIpService, sendToRepeaterHandler,
+                sendToIntruderHandler, bypass403ScanHandler, (event, items) -> {}, (event, items) -> {});
     }
 
     public AuthContextMenuProvider(Supplier<List<String>> userNamesSupplier,
@@ -137,8 +171,27 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
                                     BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> updateToLatestAuthHandler,
                                     BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> selectFromHistoryHandler) {
         this(userNamesSupplier, enabledSupplier, enablePluginHandler, sendHandler, extractHandler,
-                createUserHandler, fakeIpService, sendToRepeaterHandler, sendToIntruderHandler,
+                createUserHandler, List::of, fakeIpService, sendToRepeaterHandler, sendToIntruderHandler,
                 bypass403ScanHandler, updateToLatestAuthHandler, selectFromHistoryHandler, (event, items) -> {});
+    }
+
+    public AuthContextMenuProvider(Supplier<List<String>> userNamesSupplier,
+                                    Supplier<Boolean> enabledSupplier,
+                                    Runnable enablePluginHandler,
+                                    Consumer<List<HttpRequestResponse>> sendHandler,
+                                    BiConsumer<String, String> extractHandler,
+                                    Function<String, String> createUserHandler,
+                                    Supplier<List<String>> authHeaderKeywordsSupplier,
+                                    FakeIpService fakeIpService,
+                                    Consumer<HttpRequest> sendToRepeaterHandler,
+                                    Consumer<HttpRequest> sendToIntruderHandler,
+                                    Consumer<List<HttpRequestResponse>> bypass403ScanHandler,
+                                    BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> updateToLatestAuthHandler,
+                                    BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> selectFromHistoryHandler) {
+        this(userNamesSupplier, enabledSupplier, enablePluginHandler, sendHandler, extractHandler,
+                createUserHandler, authHeaderKeywordsSupplier, fakeIpService, sendToRepeaterHandler,
+                sendToIntruderHandler, bypass403ScanHandler, updateToLatestAuthHandler,
+                selectFromHistoryHandler, (event, items) -> {});
     }
 
     public AuthContextMenuProvider(Supplier<List<String>> userNamesSupplier,
@@ -154,8 +207,28 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
                                     BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> updateToLatestAuthHandler,
                                     BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> selectFromHistoryHandler,
                                     BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> deleteAuthHandler) {
+        this(userNamesSupplier, enabledSupplier, enablePluginHandler, sendHandler, extractHandler,
+                createUserHandler, List::of, fakeIpService, sendToRepeaterHandler, sendToIntruderHandler,
+                bypass403ScanHandler, updateToLatestAuthHandler, selectFromHistoryHandler, deleteAuthHandler);
+    }
+
+    public AuthContextMenuProvider(Supplier<List<String>> userNamesSupplier,
+                                    Supplier<Boolean> enabledSupplier,
+                                    Runnable enablePluginHandler,
+                                    Consumer<List<HttpRequestResponse>> sendHandler,
+                                    BiConsumer<String, String> extractHandler,
+                                    Function<String, String> createUserHandler,
+                                    Supplier<List<String>> authHeaderKeywordsSupplier,
+                                    FakeIpService fakeIpService,
+                                    Consumer<HttpRequest> sendToRepeaterHandler,
+                                    Consumer<HttpRequest> sendToIntruderHandler,
+                                    Consumer<List<HttpRequestResponse>> bypass403ScanHandler,
+                                    BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> updateToLatestAuthHandler,
+                                    BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> selectFromHistoryHandler,
+                                    BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> deleteAuthHandler) {
         this.userNamesSupplier = userNamesSupplier;
         this.enabledSupplier = enabledSupplier;
+        this.authHeaderKeywordsSupplier = authHeaderKeywordsSupplier != null ? authHeaderKeywordsSupplier : List::of;
         this.enablePluginHandler = enablePluginHandler;
         this.sendHandler = sendHandler;
         this.extractHandler = extractHandler;
@@ -267,7 +340,7 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
         for (String name : userNames) {
             JMenuItem userItem = new JMenuItem(name);
             userItem.addActionListener(e -> {
-                String authText = extractAuthHeaders(selectedItems);
+                String authText = extractAuthHeaders(selectedItems, authHeaderKeywordsSupplier.get());
                 extractHandler.accept(authText, name);
             });
             menu.add(userItem);
@@ -280,7 +353,7 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
         // "+ New User" 选项
         JMenuItem newUserItem = new JMenuItem(I18n.getInstance().text("auth_context_menu", "menu.newUser"));
         newUserItem.addActionListener(e -> {
-            String authText = extractAuthHeaders(selectedItems);
+            String authText = extractAuthHeaders(selectedItems, authHeaderKeywordsSupplier.get());
             if (authText.isEmpty()) {
                 JOptionPane.showMessageDialog(null,
                         I18n.getInstance().text("auth_context_menu", "dialog.noMessage.message"),
@@ -441,7 +514,9 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
                              Function<HttpRequest, HttpRequest> requestTransformer,
                              boolean sendToIntruder) {
         Optional<MessageEditorHttpRequestResponse> editorContext = event.messageEditorRequestResponse();
-        if (editorContext.isPresent()) {
+        List<HttpRequestResponse> explicitSelectedItems = event.selectedRequestResponses();
+        boolean hasExplicitSelectedItems = explicitSelectedItems != null && !explicitSelectedItems.isEmpty();
+        if (!hasExplicitSelectedItems && editorContext.isPresent()) {
             HttpRequest request = editorContext.get().requestResponse().request();
             if (request == null) {
                 return;
@@ -477,19 +552,11 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
      * @return 提取到的认证头文本（格式: HeaderName: HeaderValue，每行一条）
      */
     static String extractAuthHeaders(List<HttpRequestResponse> selectedItems) {
-        StringBuilder sb = new StringBuilder();
-        for (HttpRequestResponse reqResp : selectedItems) {
-            HttpRequest request = reqResp.request();
-            if (request == null) {
-                continue;
-            }
-            for (HttpHeader header : request.headers()) {
-                if (isAuthHeader(header.name())) {
-                    sb.append(header.name()).append(": ").append(header.value()).append("\n");
-                }
-            }
-        }
-        return sb.toString().trim();
+        return extractAuthHeaders(selectedItems, List.of());
+    }
+
+    static String extractAuthHeaders(List<HttpRequestResponse> selectedItems, List<String> authHeaderNameKeywords) {
+        return HttpHeaderUtils.extractAuthHeaders(selectedItems, authHeaderNameKeywords);
     }
 
     /**

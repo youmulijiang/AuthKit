@@ -5,7 +5,7 @@ import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.ui.editor.EditorOptions;
 import burp.api.montoya.ui.editor.HttpRequestEditor;
 import burp.api.montoya.ui.editor.HttpResponseEditor;
-import core.Bypass403ScanResult;
+import core.scan.bypass403.Bypass403ScanResult;
 import utils.I18n;
 
 import javax.swing.*;
