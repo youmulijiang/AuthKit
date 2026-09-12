@@ -11,7 +11,8 @@ import burp.api.montoya.http.message.requests.HttpRequest;
 
 /**
  * Intruder 爆破请求伪造 IP 处理器。
- * 当请求来源为 Intruder 时，在发送前为每个数据包注入一组随机伪造 IP 请求头。
+ * 仅处理由 AuthKit「随机 IP 爆破」标记过的 Intruder 请求，
+ * 每个数据包在发送前注入一组新的随机伪造 IP（含 X-Forwarded-For）。
  */
 public class FakeIpIntruderHttpHandler implements HttpHandler {
 
@@ -26,7 +27,8 @@ public class FakeIpIntruderHttpHandler implements HttpHandler {
         if (!shouldApply(requestToBeSent)) {
             return RequestToBeSentAction.continueWith(requestToBeSent);
         }
-        HttpRequest updatedRequest = fakeIpService.addRandomIpHeaders(requestToBeSent);
+        HttpRequest unmarked = fakeIpService.unmarkIntruderBruteForce(requestToBeSent);
+        HttpRequest updatedRequest = fakeIpService.addRandomIpHeaders(unmarked);
         return RequestToBeSentAction.continueWith(updatedRequest);
     }
 
@@ -41,7 +43,7 @@ public class FakeIpIntruderHttpHandler implements HttpHandler {
         }
         ToolSource toolSource = requestToBeSent.toolSource();
         ToolType toolType = toolSource != null ? toolSource.toolType() : null;
-        return shouldApply(toolType);
+        return shouldApply(toolType) && fakeIpService.isMarkedForIntruderBruteForce(requestToBeSent);
     }
 
     boolean shouldApply(ToolType toolType) {

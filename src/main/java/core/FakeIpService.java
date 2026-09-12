@@ -13,6 +13,11 @@ public class FakeIpService {
 
     public static final String LOCALHOST_IP = "127.0.0.1";
     public static final String INTRUDER_PAYLOAD_NAME = "fakeIpPayloads";
+    public static final String XFF_HEADER_NAME = "X-Forwarded-For";
+    public static final int INTRUDER_PAYLOAD_COUNT = 256;
+    /** Intruder 爆破标记头：发送到 Intruder 时写入，发包时由 Handler 识别并移除。名称刻意避开鉴权关键字。 */
+    public static final String BRUTE_FORCE_MARKER_HEADER = "X-AK-Fake-IP";
+    public static final String BRUTE_FORCE_MARKER_VALUE = "1";
 
     private static final List<String> FAKE_IP_HEADERS = List.of(
             "X-Forwarded-For", "X-Forwarded", "Forwarded-For", "Forwarded",
@@ -74,14 +79,54 @@ public class FakeIpService {
         return addFakeIpHeaders(request, randomPublicIp());
     }
 
+    /**
+     * 标记请求用于 Intruder 随机 IP 爆破。
+     * 不在此处写入固定 IP，避免整轮爆破共用同一个 XFF。
+     */
     public HttpRequest addBruteForceHeaders(HttpRequest request) {
-        return addRandomIpHeaders(request);
+        return markForIntruderBruteForce(request);
+    }
+
+    public HttpRequest markForIntruderBruteForce(HttpRequest request) {
+        if (request == null) {
+            return null;
+        }
+        return request.hasHeader(BRUTE_FORCE_MARKER_HEADER)
+                ? request.withUpdatedHeader(BRUTE_FORCE_MARKER_HEADER, BRUTE_FORCE_MARKER_VALUE)
+                : request.withAddedHeader(BRUTE_FORCE_MARKER_HEADER, BRUTE_FORCE_MARKER_VALUE);
+    }
+
+    public boolean isMarkedForIntruderBruteForce(HttpRequest request) {
+        return request != null && request.hasHeader(BRUTE_FORCE_MARKER_HEADER, BRUTE_FORCE_MARKER_VALUE);
+    }
+
+    public HttpRequest unmarkIntruderBruteForce(HttpRequest request) {
+        if (request == null) {
+            return null;
+        }
+        return request.hasHeader(BRUTE_FORCE_MARKER_HEADER)
+                ? request.withRemovedHeader(BRUTE_FORCE_MARKER_HEADER)
+                : request;
     }
 
     public String randomPublicIp() {
         int[] range = PUBLIC_IP_RANGES[random.nextInt(PUBLIC_IP_RANGES.length)];
         int value = range[0] + random.nextInt(range[1] - range[0]);
         return intToIpv4(value);
+    }
+
+    /**
+     * 生成 Intruder 插入点可用的 X-Forwarded-For 请求头 payload。
+     */
+    public String buildXffHeaderPayload() {
+        return buildXffHeaderPayload(randomPublicIp());
+    }
+
+    public String buildXffHeaderPayload(String ip) {
+        if (!isValidIpv4(ip)) {
+            throw new IllegalArgumentException("Invalid IPv4 address: " + ip);
+        }
+        return XFF_HEADER_NAME + ": " + ip;
     }
 
     public boolean isValidIpv4(String ip) {

@@ -6,6 +6,7 @@ import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.proxy.ProxyHttpRequestResponse;
 import burp.api.montoya.ui.contextmenu.ContextMenuEvent;
+import burp.api.montoya.ui.contextmenu.InvocationType;
 import burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse;
 import utils.HttpHeaderUtils;
 import utils.I18n;
@@ -15,7 +16,6 @@ import view.dialog.AuthHistorySelectDialog;
 import javax.swing.*;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
 
@@ -35,7 +35,7 @@ public class AuthHistoryService {
 
     /**
      * 从代理历史中查找同 host 下最新的含不同鉴权字段的请求，替换原始请求的鉴权字段后输出。
-     * 若触发来源是消息编辑器则直接修改编辑器内容，否则发送到 Repeater。
+     * 仅可写 Request 编辑器会直接回写；代理历史等只读视图改为发送到 Repeater。
      */
     public void updateToLatestAuth(ContextMenuEvent event, List<HttpRequestResponse> items) {
         if (items == null || items.isEmpty()) return;
@@ -76,40 +76,32 @@ public class AuthHistoryService {
             return;
         }
 
-        HttpRequest updated =
-                AuthContextMenuProvider.replaceAuthHeaders(originalRequest, latest.request());
-        Optional<MessageEditorHttpRequestResponse> editorCtx =
-                event.messageEditorRequestResponse();
-        if (editorCtx.isPresent()) {
-            editorCtx.get().setRequest(updated);
-        } else {
-            montoyaApi.repeater().sendToRepeater(updated, "AuthKit - Updated Auth");
-        }
+        applyAuthHeaders(event, originalRequest, latest.request());
     }
 
     /**
-     * 弹出历史选择对话框，展示同 host 下按鉴权字段去重的代理历史。
-     * 用户选中后将所选请求的鉴权字段替换到原始请求，输出到编辑器或 Repeater。
+     * 弹出历史选择对话框，展示全量代理历史（含鉴权字段的请求）。
+     * Dialog 内部负责 host/referer/自定义 范围过滤与去重；用户选中后将所选请求的
+     * 鉴权字段替换到原始请求。仅可写 Request 编辑器会直接回写，否则发送到 Repeater。
      */
     public void selectFromHistory(JComponent parent, ContextMenuEvent event,
                                   List<HttpRequestResponse> items) {
         if (items == null || items.isEmpty()) return;
         HttpRequest originalRequest = items.get(0).request();
         if (originalRequest == null) return;
-        String host = originalRequest.httpService().host();
+        String originalHost = originalRequest.httpService().host();
+        String originalReferer = originalRequest.headerValue("Referer");
 
-        // 同 host、含鉴权字段的代理历史，按鉴权字段组合去重，同 key 保留最新
+        // 拉取全量代理历史，仅保留含鉴权字段的条目，传给 Dialog 自行过滤
         List<ProxyHttpRequestResponse> history = montoyaApi.proxy().history();
-        LinkedHashMap<String, ProxyHttpRequestResponse> deduped = new LinkedHashMap<>();
+        List<ProxyHttpRequestResponse> withAuth = new ArrayList<>();
         for (ProxyHttpRequestResponse item : history) {
-            if (!host.equals(item.host())) continue;
-            String key = buildAuthDeduplicationKey(item.request());
-            if (!key.isEmpty()) {
-                deduped.put(key, item);
+            if (hasAuthHeaders(item.request())) {
+                withAuth.add(item);
             }
         }
 
-        if (deduped.isEmpty()) {
+        if (withAuth.isEmpty()) {
             JOptionPane.showMessageDialog(null,
                     I18n.getInstance().text("auth_context_menu", "dialog.authHistory.noHistory"),
                     I18n.getInstance().text("auth_context_menu", "menu.updateAuth"),
@@ -117,60 +109,74 @@ public class AuthHistoryService {
             return;
         }
 
-        List<ProxyHttpRequestResponse> dedupedList = new ArrayList<>(deduped.values());
-        AuthHistorySelectDialog.show(parent, montoyaApi, dedupedList, selected -> {
-            HttpRequest updated =
-                    AuthContextMenuProvider.replaceAuthHeaders(originalRequest, selected.request());
-            Optional<MessageEditorHttpRequestResponse> editorCtx =
-                    event.messageEditorRequestResponse();
-            if (editorCtx.isPresent()) {
-                editorCtx.get().setRequest(updated);
-            } else {
-                montoyaApi.repeater().sendToRepeater(updated, "AuthKit - Updated Auth");
-            }
-        });
+        AuthHistorySelectDialog.show(parent, montoyaApi, withAuth, originalHost, originalReferer,
+                selected -> applyAuthHeaders(event, originalRequest, selected.request()));
     }
 
     /**
      * 删除选中请求中的鉴权字段。配置非空时只按配置删除，配置为空时使用默认规则。
-     * 若在编辑器上下文中，直接回写编辑器；否则发送到 Repeater。
-     * 显式选中的请求优先于编辑器上下文。
+     * 仅可写 Request 编辑器会直接回写；代理历史等只读视图以及表格选中项改为发送到 Repeater。
      */
     public void deleteAuthFields(ContextMenuEvent event, List<HttpRequestResponse> items,
                                  List<String> authHeaderNameKeywords) {
         if (items == null || items.isEmpty()) return;
-        Optional<MessageEditorHttpRequestResponse> editorCtx =
-                event.messageEditorRequestResponse();
-        List<HttpRequestResponse> explicitSelectedItems = event.selectedRequestResponses();
-        boolean hasExplicitSelectedItems = explicitSelectedItems != null && !explicitSelectedItems.isEmpty();
-        if (!hasExplicitSelectedItems && editorCtx.isPresent()) {
+        if (canWriteToRequestEditor(event)) {
             HttpRequest request =
-                    editorCtx.get().requestResponse().request();
+                    event.messageEditorRequestResponse().get().requestResponse().request();
             if (request == null) return;
-            editorCtx.get().setRequest(HttpHeaderUtils.removeAuthHeaders(request, authHeaderNameKeywords));
-        } else {
-            for (HttpRequestResponse item : items) {
-                HttpRequest request = item.request();
-                if (request == null) continue;
-                montoyaApi.repeater().sendToRepeater(
-                        HttpHeaderUtils.removeAuthHeaders(request, authHeaderNameKeywords),
-                        "AuthKit - Removed Auth");
-            }
+            outputUpdatedRequest(event, HttpHeaderUtils.removeAuthHeaders(request, authHeaderNameKeywords),
+                    "AuthKit - Removed Auth");
+            return;
+        }
+        for (HttpRequestResponse item : items) {
+            HttpRequest request = item.request();
+            if (request == null) continue;
+            montoyaApi.repeater().sendToRepeater(
+                    HttpHeaderUtils.removeAuthHeaders(request, authHeaderNameKeywords),
+                    "AuthKit - Removed Auth");
         }
     }
 
     /**
-     * 构建代理历史鉴权字段的去重键。
-     * 将请求中所有鉴权字段（名称小写:值）排序后拼接，相同组合视为同一鉴权上下文。
+     * 将 source 的鉴权头应用到 original，并按事件上下文输出。
      */
-    private static String buildAuthDeduplicationKey(HttpRequest request) {
-        List<String> parts = new ArrayList<>();
-        for (HttpHeader header : request.headers()) {
-            if (AuthContextMenuProvider.isAuthHeader(header.name())) {
-                parts.add(header.name().toLowerCase() + "=" + header.value());
-            }
+    void applyAuthHeaders(ContextMenuEvent event, HttpRequest originalRequest, HttpRequest sourceRequest) {
+        if (originalRequest == null || sourceRequest == null) return;
+        outputUpdatedRequest(event,
+                AuthContextMenuProvider.replaceAuthHeaders(originalRequest, sourceRequest),
+                "AuthKit - Updated Auth");
+    }
+
+    /**
+     * 仅在可写的 Request 编辑器（如 Repeater）中回写；代理历史等只读视图中 setRequest 会被静默忽略，
+     * 此时以及存在表格选中项时改为发送到 Repeater。
+     */
+    void outputUpdatedRequest(ContextMenuEvent event, HttpRequest updated, String repeaterTabName) {
+        if (canWriteToRequestEditor(event)) {
+            event.messageEditorRequestResponse().get().setRequest(updated);
+            return;
         }
-        parts.sort(String::compareTo);
-        return String.join("|", parts);
+        montoyaApi.repeater().sendToRepeater(updated, repeaterTabName);
+    }
+
+    /**
+     * 判断当前右键上下文是否允许直接改写请求编辑器。
+     * 代理历史同时带有只读消息查看器，不能仅凭 editor 存在就调用 setRequest。
+     */
+    static boolean canWriteToRequestEditor(ContextMenuEvent event) {
+        if (event == null) return false;
+        List<HttpRequestResponse> explicitSelectedItems = event.selectedRequestResponses();
+        boolean hasExplicitSelectedItems = explicitSelectedItems != null && !explicitSelectedItems.isEmpty();
+        Optional<MessageEditorHttpRequestResponse> editorCtx = event.messageEditorRequestResponse();
+        return !hasExplicitSelectedItems
+                && editorCtx.isPresent()
+                && event.isFrom(InvocationType.MESSAGE_EDITOR_REQUEST);
+    }
+
+    private static boolean hasAuthHeaders(HttpRequest request) {
+        for (HttpHeader header : request.headers()) {
+            if (AuthContextMenuProvider.isAuthHeader(header.name())) return true;
+        }
+        return false;
     }
 }

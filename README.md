@@ -13,11 +13,7 @@ AuthKit 用于把一条业务请求快速扩展为 `Original / Unauthorized / �
 
 ---
 ## 界面
-![alt text](img/image.png)
-![alt text](img/image-4.png)
-![alt text](img/image-5.png)
-![alt text](img/image-7.png)
-![alt text](img/image-8.png)
+
 ## 核心能力
 
 - **多身份自动重放**：自动生成 `Original`、`Unauthorized`、`UserA/UserB/...` 对比结果
@@ -105,6 +101,8 @@ target/AuthKit-1.0-SNAPSHOT.jar
 - `Response Diff` 与元数据透视
 - `Tool Type Scope`（`Proxy` / `Repeater` / `Intruder` / `Extensions`）
 - Burp 右键送测与认证头提取
+- 右键 `随机 IP 爆破`：发送到 Intruder 后，每个数据包自动写入不同的 `X-Forwarded-For` 等伪造来源头
+- Intruder Payload 生成器：`AuthKit Fake IP`（随机 IP）与 `AuthKit X-Forwarded-For`（完整 `X-Forwarded-For: <ip>` 头）
 
 ---
 

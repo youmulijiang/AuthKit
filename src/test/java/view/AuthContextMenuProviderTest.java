@@ -77,7 +77,7 @@ class AuthContextMenuProviderTest {
     }
 
     @Test
-    @DisplayName("随机 IP 爆破菜单应把随机 IP 写入请求头后发送到 Intruder")
+    @DisplayName("随机 IP 爆破菜单应标记请求后发送到 Intruder")
     void fakeIpBruteforceMenu_shouldSendHeaderRequestToIntruder() {
         I18n i18n = I18n.getInstance();
         I18n.Language originalLanguage = i18n.getCurrentLanguage();
@@ -96,7 +96,7 @@ class AuthContextMenuProviderTest {
         JMenu fakeIpMenu = findMenu(provider.provideMenuItems(event), "Fake IP");
         ((JMenuItem) fakeIpMenu.getMenuComponent(3)).doClick();
 
-        verify(request).withAddedHeader(eq("X-Forwarded-For"), argThat(new FakeIpService()::isValidIpv4));
+        verify(request).withAddedHeader(FakeIpService.BRUTE_FORCE_MARKER_HEADER, FakeIpService.BRUTE_FORCE_MARKER_VALUE);
         assertEquals(List.of(request), intruderRequests);
         } finally {
             i18n.setLanguage(originalLanguage);

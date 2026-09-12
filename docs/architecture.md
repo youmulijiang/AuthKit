@@ -69,7 +69,7 @@ Burp HTTP 响应
 | 能力 | 主要实现 |
 | --- | --- |
 | CSV/HTML 导出 | `AuthResultExportService` |
-| Fake IP 注入与 Intruder Payload | `FakeIpService`、`FakeIpIntruderHttpHandler`、`FakeIpPayloadGeneratorProvider` |
+| Fake IP 注入与 Intruder 爆破 | `FakeIpService` 标记请求；`FakeIpIntruderHttpHandler` 在每个 Intruder 数据包发送前注入不同随机 IP（含 XFF）；`FakeIpPayloadGeneratorProvider` 通过 Montoya `PayloadGeneratorProvider` 提供随机 IP 与 `X-Forwarded-For` 头 payload |
 | 403 绕过扫描 | `core.scan.bypass403.*`、`Bypass403ScanDialog` |
 | IDOR 扫描 | `core.scan.idor.*`、`IdorScanDialog` |
 | JWT 查看与扫描 | `JwtEditorTab`、`JwtPanel`、`core.scan.jwt.*` |

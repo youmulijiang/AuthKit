@@ -93,10 +93,11 @@ public class AuthKit implements BurpExtension {
         diffController.bind();
         contextMenuController.register();
 
-        // 注册 Intruder 随机 IP payload 生成器与请求处理器
+        // 注册 Intruder 随机 IP / XFF 头 payload 生成器
         montoyaApi.intruder().registerPayloadGeneratorProvider(
-                new FakeIpPayloadGeneratorProvider(fakeIpService));
-        montoyaApi.http().registerHttpHandler(new FakeIpIntruderHttpHandler(fakeIpService));
+                new FakeIpPayloadGeneratorProvider(fakeIpService, FakeIpPayloadGeneratorProvider.Mode.IP));
+        montoyaApi.intruder().registerPayloadGeneratorProvider(
+                new FakeIpPayloadGeneratorProvider(fakeIpService, FakeIpPayloadGeneratorProvider.Mode.XFF_HEADER));
 
         // 注册 JWT 编辑器 Provider（在 Burp 请求编辑器中添加 JWT 选项卡）
         montoyaApi.userInterface().registerHttpRequestEditorProvider(new JwtRequestEditorProvider(montoyaApi));
@@ -106,6 +107,8 @@ public class AuthKit implements BurpExtension {
         HttpRequestHandler httpHandler = new HttpRequestHandler(requestFilter,
                 dataTableController::handleCapturedRequest);
         montoyaApi.http().registerHttpHandler(httpHandler);
+        // 伪造 IP 处理器后注册，确保在捕获处理器之后改写每个 Intruder 数据包的 XFF
+        montoyaApi.http().registerHttpHandler(new FakeIpIntruderHttpHandler(fakeIpService));
 
         // 注册插件卸载时清理线程池
         montoyaApi.extension().registerUnloadingHandler(() -> {
