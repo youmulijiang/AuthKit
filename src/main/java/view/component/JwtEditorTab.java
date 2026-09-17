@@ -11,6 +11,7 @@ import burp.api.montoya.ui.editor.extension.ExtensionProvidedHttpRequestEditor;
 import com.auth0.jwt.JWT;
 import com.auth0.jwt.algorithms.Algorithm;
 import com.auth0.jwt.interfaces.DecodedJWT;
+import utils.JwtTextUtils;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -21,7 +22,6 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * JWT 编辑器选项卡
@@ -32,10 +32,6 @@ import java.util.regex.Pattern;
  * 编辑 Header/Payload 时动态重建 JWT 并实时替换请求中对应的 token。
  */
 public class JwtEditorTab implements ExtensionProvidedHttpRequestEditor {
-
-    /** JWT 正则：匹配三段式 Base64URL token。不能限定 eyJ，否则格式化 JSON 重新编码后可能无法识别。 */
-    private static final Pattern JWT_PATTERN =
-            Pattern.compile("([A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]*)");
 
     private static final String[] ALGORITHMS = {
             "HS256", "HS384", "HS512",
@@ -239,8 +235,8 @@ public class JwtEditorTab implements ExtensionProvidedHttpRequestEditor {
                     Base64.getUrlDecoder().decode(decoded.getHeader()), StandardCharsets.UTF_8);
             String payload = new String(
                     Base64.getUrlDecoder().decode(decoded.getPayload()), StandardCharsets.UTF_8);
-            textAreaHeader.setText(formatJson(header));
-            textAreaPayload.setText(formatJson(payload));
+            textAreaHeader.setText(JwtTextUtils.formatJson(header));
+            textAreaPayload.setText(JwtTextUtils.formatJson(payload));
             textAreaSignature.setText(decoded.getSignature());
             autoSelectAlgorithm(header);
         } catch (Exception ex) {
@@ -317,10 +313,10 @@ public class JwtEditorTab implements ExtensionProvidedHttpRequestEditor {
                 String value = header.value();
                 if (value == null || value.isEmpty()) continue;
 
-                Matcher matcher = JWT_PATTERN.matcher(value);
+                Matcher matcher = JwtTextUtils.JWT_PATTERN.matcher(value);
                 while (matcher.find()) {
                     String jwt = matcher.group(1);
-                    if (isValidJwt(jwt)) {
+                    if (JwtTextUtils.isValidJwt(jwt)) {
                         occurrences.add(new HeaderJwtOccurrence(
                                 header.name(), value, matcher.start(1), matcher.end(1)));
                     }
@@ -330,15 +326,6 @@ public class JwtEditorTab implements ExtensionProvidedHttpRequestEditor {
             return new ArrayList<>();
         }
         return occurrences;
-    }
-
-    private boolean isValidJwt(String jwt) {
-        try {
-            JWT.decode(jwt);
-            return true;
-        } catch (Exception ignored) {
-            return false;
-        }
     }
 
     private boolean hasModifiedTokens() {
@@ -504,36 +491,5 @@ public class JwtEditorTab implements ExtensionProvidedHttpRequestEditor {
             case "HS512" -> Algorithm.HMAC512(secret);
             default -> Algorithm.HMAC256(secret);
         };
-    }
-
-    /** 简单 JSON 格式化 */
-    private String formatJson(String json) {
-        if (json == null || json.isEmpty()) return json;
-        StringBuilder sb = new StringBuilder();
-        int indent = 0;
-        boolean inString = false;
-        for (int i = 0; i < json.length(); i++) {
-            char c = json.charAt(i);
-            if (c == '"' && (i == 0 || json.charAt(i - 1) != '\\')) {
-                inString = !inString;
-                sb.append(c);
-            } else if (!inString) {
-                switch (c) {
-                    case '{', '[' -> { sb.append(c); sb.append('\n'); indent++;
-                                       sb.append("  ".repeat(indent)); }
-                    case '}', ']' -> { sb.append('\n'); indent--;
-                                       sb.append("  ".repeat(Math.max(0, indent)));
-                                       sb.append(c); }
-                    case ',' -> { sb.append(c); sb.append('\n');
-                                  sb.append("  ".repeat(indent)); }
-                    case ':' -> sb.append(": ");
-                    case ' ', '\t', '\n', '\r' -> { /* skip */ }
-                    default -> sb.append(c);
-                }
-            } else {
-                sb.append(c);
-            }
-        }
-        return sb.toString();
     }
 }

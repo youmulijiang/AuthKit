@@ -102,6 +102,9 @@ public class AuthKit implements BurpExtension {
         // 注册 JWT 编辑器 Provider（在 Burp 请求编辑器中添加 JWT 选项卡）
         montoyaApi.userInterface().registerHttpRequestEditorProvider(new JwtRequestEditorProvider(montoyaApi));
 
+        // 注册 JWT 响应分析 Provider（在 Burp 响应编辑器中添加 JWT 分析选项卡）
+        montoyaApi.userInterface().registerHttpResponseEditorProvider(new JwtResponseEditorProvider());
+
         // 创建并注册 HttpRequestHandler（回调委托给 DataTableController）
         ConfigRequestFilter requestFilter = new ConfigRequestFilter(configModel);
         HttpRequestHandler httpHandler = new HttpRequestHandler(requestFilter,
