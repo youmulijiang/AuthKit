@@ -80,6 +80,9 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
     /** JWT 扫描回调 */
     private Consumer<List<HttpRequestResponse>> jwtScanHandler = items -> {};
 
+    /** AI 分析回调：将选中数据包发送到 JWT 面板的 AI 对话 */
+    private Consumer<List<HttpRequestResponse>> aiAnalysisHandler = items -> {};
+
     /** 更新为最新鉴权字段回调：(event, selectedItems) */
     private final BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> updateToLatestAuthHandler;
 
@@ -250,6 +253,10 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
         this.jwtScanHandler = handler != null ? handler : items -> {};
     }
 
+    public void setAiAnalysisHandler(Consumer<List<HttpRequestResponse>> handler) {
+        this.aiAnalysisHandler = handler != null ? handler : items -> {};
+    }
+
     @Override
     public List<Component> provideMenuItems(ContextMenuEvent event) {
         List<HttpRequestResponse> selectedItems = resolveSelectedItems(event);
@@ -278,6 +285,9 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
 
         // === Menu 6: JWT Scan ===
         menuItems.add(buildJwtScanMenu(finalSelectedItems));
+
+        // === Menu 7: Send to AuthKit AI ===
+        menuItems.add(buildAiAnalysisMenu(finalSelectedItems));
 
         // === Menu 7: 更新鉴权字段 ===
         menuItems.add(buildUpdateAuthMenu(event, finalSelectedItems));
@@ -408,6 +418,12 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
     private Component buildJwtScanMenu(List<HttpRequestResponse> selectedItems) {
         JMenuItem item = new JMenuItem(I18n.getInstance().text("auth_context_menu", "menu.jwt.scan"));
         item.addActionListener(e -> jwtScanHandler.accept(selectedItems));
+        return item;
+    }
+
+    private Component buildAiAnalysisMenu(List<HttpRequestResponse> selectedItems) {
+        JMenuItem item = new JMenuItem(I18n.getInstance().text("ai", "menu.sendToAi"));
+        item.addActionListener(e -> aiAnalysisHandler.accept(selectedItems));
         return item;
     }
 

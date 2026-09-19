@@ -1,7 +1,10 @@
 package view;
 
 import burp.api.montoya.MontoyaApi;
+import model.AiConfigModel;
 import utils.I18n;
+import view.binding.AiConfigBinder;
+import view.component.AiChatPanel;
 import view.component.ComparePanel;
 import view.component.ConfigurationPanel;
 import view.component.DataTablePanel;
@@ -17,7 +20,7 @@ import java.awt.*;
  * 插件主面板
  * 作为 Burp Suite Tab 的根面板，使用 JSplitPane 将界面分为左右两部分：
  * 左侧: 工具栏 + 数据表 + 元数据透视表
- * 右侧: 报文对比区（原始报文 / 被比较报文 / Diff 展示）
+ * 右侧: 选项卡（View / Configuration / User / JWT / AI）
  */
 public class MainPanel extends JPanel {
 
@@ -29,6 +32,9 @@ public class MainPanel extends JPanel {
     private final ConfigurationPanel panelConfiguration;
     private final UserPanel panelUser;
     private final JwtPanel panelJwt;
+    private final AiChatPanel panelAi;
+    /** AI 配置模型（Configuration 选项卡编辑，AI 对话选项卡读取） */
+    private final AiConfigModel aiConfigModel;
 
     /**
      * 构造主面板
@@ -43,6 +49,11 @@ public class MainPanel extends JPanel {
         this.panelConfiguration = new ConfigurationPanel.Builder().build();
         this.panelUser = new UserPanel.Builder().build();
         this.panelJwt = new JwtPanel();
+        // AI 配置模型：从本地持久化恢复，配置面板绑定编辑，AI 对话面板共享读取
+        this.aiConfigModel = new AiConfigModel();
+        aiConfigModel.load();
+        AiConfigBinder.bind(panelConfiguration, aiConfigModel);
+        this.panelAi = new AiChatPanel(aiConfigModel);
         this.tabbedRight = new JTabbedPane();
         initLayout();
         bindEvents();
@@ -66,11 +77,12 @@ public class MainPanel extends JPanel {
         splitLeftVertical.setResizeWeight(0.7);
         panelLeft.add(splitLeftVertical, BorderLayout.CENTER);
 
-        // 右侧面板: JTabbedPane（View / Configuration / User）
+        // 右侧面板: JTabbedPane（View / Configuration / User / JWT / AI）
         tabbedRight.addTab("", panelCompare);
         tabbedRight.addTab("", panelConfiguration);
         tabbedRight.addTab("", panelUser);
         tabbedRight.addTab("", panelJwt);
+        tabbedRight.addTab("", panelAi);
         tabbedRight.setSelectedComponent(panelConfiguration);
 
         // 左右水平分割
@@ -111,6 +123,7 @@ public class MainPanel extends JPanel {
         tabbedRight.setTitleAt(1, i18n.text("main", "tab.configuration"));
         tabbedRight.setTitleAt(2, i18n.text("main", "tab.user"));
         tabbedRight.setTitleAt(3, i18n.text("main", "tab.jwt"));
+        tabbedRight.setTitleAt(4, i18n.text("main", "tab.ai"));
     }
 
     /** 获取工具栏面板 */
@@ -151,5 +164,15 @@ public class MainPanel extends JPanel {
     /** 获取JWT面板（JWT 选项卡） */
     public JwtPanel getPanelJwt() {
         return panelJwt;
+    }
+
+    /** 获取AI对话面板（AI 选项卡） */
+    public AiChatPanel getPanelAi() {
+        return panelAi;
+    }
+
+    /** 获取共享的 AI 配置模型 */
+    public AiConfigModel getAiConfigModel() {
+        return aiConfigModel;
     }
 }

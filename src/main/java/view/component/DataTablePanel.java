@@ -42,6 +42,9 @@ public class DataTablePanel extends JPanel {
     /** 数据提供器：根据行索引（model index）返回对应的可搜索文本 */
     private Function<Integer, String> dataProvider;
 
+    /** 越权判定器：根据 model 行索引返回该行是否存在越权，由协调层注入 */
+    private java.util.function.IntPredicate unauthorizedChecker;
+
     /** 是否仅显示越权的行 */
     private boolean unauthorizedOnly;
 
@@ -286,6 +289,16 @@ public class DataTablePanel extends JPanel {
     }
 
     /**
+     * 设置越权判定器，用于"仅显示越权"过滤。
+     * 判定逻辑由协调层注入（基于 Rank 阈值），与表格展示指标无关。
+     *
+     * @param checker 根据 model 行索引返回是否存在越权的函数
+     */
+    public void setUnauthorizedChecker(java.util.function.IntPredicate checker) {
+        this.unauthorizedChecker = checker;
+    }
+
+    /**
      * 设置是否仅显示越权的行
      *
      * @param unauthorizedOnly true 表示仅显示存在越权（鉴权对象列与 Original 相同）的行
@@ -322,8 +335,8 @@ public class DataTablePanel extends JPanel {
         rowSorter.setRowFilter(new RowFilter<DefaultTableModel, Integer>() {
             @Override
             public boolean include(Entry<? extends DefaultTableModel, ? extends Integer> entry) {
-                // 越权过滤：检查是否存在与 Original 相同的鉴权对象列（即越权）
-                if (unauthorizedOnly && !hasAnyUnauthorized(entry)) {
+                // 越权过滤：由注入的判定器决定（基于 Rank 阈值，与展示指标无关）
+                if (unauthorizedOnly && !isRowUnauthorized(entry.getIdentifier())) {
                     return false;
                 }
 
@@ -379,19 +392,12 @@ public class DataTablePanel extends JPanel {
                 }
             }
 
-            /** 检查该行是否存在越权：任一鉴权对象列的值与 Original 相同即为越权 */
-            private boolean hasAnyUnauthorized(Entry<? extends DefaultTableModel, ? extends Integer> entry) {
-                if (entry.getValueCount() <= FIXED_COLUMN_COUNT + 1) {
+            /** 检查该行是否存在越权：委托给注入的判定器 */
+            private boolean isRowUnauthorized(Integer modelRow) {
+                if (unauthorizedChecker == null) {
                     return false;
                 }
-                Object originalValue = entry.getValue(FIXED_COLUMN_COUNT);
-                for (int i = FIXED_COLUMN_COUNT + 1; i < entry.getValueCount(); i++) {
-                    Object cellValue = entry.getValue(i);
-                    if (Objects.equals(originalValue, cellValue)) {
-                        return true;
-                    }
-                }
-                return false;
+                return modelRow != null && unauthorizedChecker.test(modelRow);
             }
         });
     }

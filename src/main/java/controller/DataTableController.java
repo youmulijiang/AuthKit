@@ -4,6 +4,7 @@ import burp.api.montoya.http.handler.HttpResponseReceived;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import core.AuthResultExportService;
 import core.HashService;
+import core.RankService;
 import model.AuthUserModel;
 import model.CompareSampleModel;
 import model.MessageDataModel;
@@ -79,6 +80,12 @@ public class DataTableController {
         mainPanel.getPanelConfiguration().getCheckBoxUnauthorizedOnly().addActionListener(e ->
                 mainPanel.getPanelDataTable().setUnauthorizedOnly(
                         mainPanel.getPanelConfiguration().getCheckBoxUnauthorizedOnly().isSelected()));
+
+        // 注入越权判定器：基于 RankService 的归一化评分与阈值判定，与表格展示指标无关
+        mainPanel.getPanelDataTable().setUnauthorizedChecker(modelRow -> {
+            CompareSampleModel sample = controller.getSample(modelRow);
+            return sample != null && sample.hasUnauthorizedByRank(RankService.UNAUTHORIZED_THRESHOLD);
+        });
     }
 
     /**
@@ -110,6 +117,7 @@ public class DataTableController {
                         HashService.hash(response.bodyToString()),
                         request, response
                 );
+                originalData.setBody(response.bodyToString());
                 originalData.setContentType(response.headerValue("Content-Type") != null
                         ? response.headerValue("Content-Type") : "");
                 // 从拦截响应的 annotations 读取 Burp 备注

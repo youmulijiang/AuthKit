@@ -74,13 +74,45 @@ class ParamReplaceProcessorTest {
         user.setRawParams("userId=testuser");
 
         try (MockedStatic<HttpParameter> paramStatic = mockStatic(HttpParameter.class)) {
-            paramStatic.when(() -> HttpParameter.urlParameter("userId", "testuser"))
+            paramStatic.when(() -> HttpParameter.parameter("userId", "testuser", HttpParameterType.URL))
                     .thenReturn(mockParam);
 
             HttpRequest result = processor.process(original, user);
 
             assertSame(afterReplace, result);
             verify(original).withUpdatedParameters(any(HttpParameter.class));
+        }
+    }
+
+    @Test
+    @DisplayName("process 应保持 JSON 参数类型不变（修复后不再降级为 URL 参数）")
+    void process_shouldKeepJsonParamType() {
+        ParamReplaceProcessor processor = new ParamReplaceProcessor();
+
+        // 模拟 JSON body 参数 userId
+        ParsedHttpParameter existingParam = mock(ParsedHttpParameter.class);
+        when(existingParam.name()).thenReturn("userId");
+        when(existingParam.type()).thenReturn(HttpParameterType.JSON);
+
+        HttpRequest original = mock(HttpRequest.class);
+        when(original.parameters()).thenReturn(List.of(existingParam));
+
+        HttpRequest afterReplace = mock(HttpRequest.class);
+        when(original.withUpdatedParameters(any(HttpParameter.class))).thenReturn(afterReplace);
+
+        HttpParameter mockParam = mock(HttpParameter.class);
+
+        AuthUserModel user = new AuthUserModel("User1");
+        user.setRawParams("userId=testuser");
+
+        try (MockedStatic<HttpParameter> paramStatic = mockStatic(HttpParameter.class)) {
+            paramStatic.when(() -> HttpParameter.parameter("userId", "testuser", HttpParameterType.JSON))
+                    .thenReturn(mockParam);
+
+            HttpRequest result = processor.process(original, user);
+
+            assertSame(afterReplace, result);
+            paramStatic.verify(() -> HttpParameter.parameter("userId", "testuser", HttpParameterType.JSON));
         }
     }
 

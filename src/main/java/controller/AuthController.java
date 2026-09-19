@@ -99,6 +99,8 @@ public class AuthController {
         HttpRequestResponse unauthReqResp = replayService.replayUnauthorized(
                 originalRequest, authHeaders);
         MessageDataModel unauthData = replayService.buildMessageData(unauthReqResp);
+        unauthData.setBody(unauthReqResp.response() != null
+                ? unauthReqResp.response().bodyToString() : null);
         unauthData.setRank(RankService.calculateRank(originalData, unauthData));
         sample.putMessageData("Unauthorized", unauthData);
 
@@ -109,6 +111,8 @@ public class AuthController {
             }
             HttpRequestResponse userReqResp = replayService.replay(originalRequest, user);
             MessageDataModel userData = replayService.buildMessageData(userReqResp);
+            userData.setBody(userReqResp.response() != null
+                    ? userReqResp.response().bodyToString() : null);
             userData.setRank(RankService.calculateRank(originalData, userData));
             sample.putMessageData(user.getName(), userData);
         }

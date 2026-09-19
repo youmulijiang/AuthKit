@@ -98,6 +98,27 @@ public class CompareSampleModel {
     }
 
     /**
+     * 判断是否存在越权：除 Original 外，任一鉴权对象的评分达到阈值即视为越权。
+     * 判定基于 Rank（响应体哈希、状态码、长度、属性数加权），与展示指标无关。
+     *
+     * @param rankThreshold 评分阈值（0~100）
+     * @return true 表示存在越权
+     */
+    public boolean hasUnauthorizedByRank(int rankThreshold) {
+        MessageDataModel original = messageDataMap.get("Original");
+        for (Map.Entry<String, MessageDataModel> entry : messageDataMap.entrySet()) {
+            if ("Original".equals(entry.getKey())) {
+                continue;
+            }
+            MessageDataModel data = entry.getValue();
+            if (data != null && data.getRank() >= rankThreshold) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * 获取指定鉴权对象的包长度
      *
      * @param authName 鉴权对象名称

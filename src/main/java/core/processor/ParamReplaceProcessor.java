@@ -27,7 +27,7 @@ public class ParamReplaceProcessor implements RequestProcessor {
     /**
      * 替换请求中匹配的参数值
      * 遍历用户配置的参数替换规则，在请求的现有参数中查找同名参数，
-     * 使用 withParameter 方法替换其值（保持原参数类型不变）。
+     * 使用原参数的类型构造新参数后整体更新（保持 URL/BODY/COOKIE/JSON 等类型不变）。
      */
     @Override
     public HttpRequest process(HttpRequest request, AuthUserModel user) {
@@ -42,25 +42,14 @@ public class ParamReplaceProcessor implements RequestProcessor {
             // 在现有参数中查找同名参数，获取其类型
             for (ParsedHttpParameter existing : existingParams) {
                 if (existing.name().equals(paramName)) {
-                    HttpParameter newParam = createParameter(paramName, newValue, existing.type());
+                    HttpParameter newParam = HttpParameter.parameter(
+                            paramName, newValue, existing.type());
                     current = current.withUpdatedParameters(newParam);
                     break;
                 }
             }
         }
         return current;
-    }
-
-    /**
-     * 根据参数类型创建对应的 HttpParameter
-     */
-    private HttpParameter createParameter(String name, String value, HttpParameterType type) {
-        return switch (type) {
-            case URL -> HttpParameter.urlParameter(name, value);
-            case BODY -> HttpParameter.bodyParameter(name, value);
-            case COOKIE -> HttpParameter.cookieParameter(name, value);
-            default -> HttpParameter.urlParameter(name, value);
-        };
     }
 }
 

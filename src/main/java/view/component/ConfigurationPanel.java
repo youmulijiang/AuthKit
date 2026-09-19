@@ -26,7 +26,7 @@ public class ConfigurationPanel extends JPanel {
     public static final String METRIC_CONTENT_TYPE = "ContentType";
 
     private static final String[] DISPLAY_METRIC_KEYS = {
-            METRIC_LENGTH, METRIC_STATUS_CODE, METRIC_HASH, METRIC_ATTRIBUTE_NUM, METRIC_RANK,
+            METRIC_RANK, METRIC_LENGTH, METRIC_STATUS_CODE, METRIC_HASH, METRIC_ATTRIBUTE_NUM,
             METRIC_NOTE, METRIC_CONTENT_TYPE
     };
 
@@ -66,13 +66,27 @@ public class ConfigurationPanel extends JPanel {
     // ===== 认证头配置 =====
     private final PlaceholderTextArea textAreaAuthHeaders;
 
+    // ===== AI 配置 =====
+    private final JTextField textFieldAiApiKey;
+    private final JTextField textFieldAiBaseUrl;
+    private final JTextField textFieldAiModel;
+    private final JComboBox<String> comboBoxAiRequestFormat;
+    private final JSpinner spinnerAiMaxPackets;
+    private final JButton btnAiTest;
+
     private TitledBorder borderBasicControl;
     private TitledBorder borderDomainScope;
     private TitledBorder borderToolTypeScope;
     private TitledBorder borderRequestFilter;
     private TitledBorder borderAuthHeaders;
+    private TitledBorder borderAiConfig;
     private JLabel labelDisplay;
     private JLabel labelLanguage;
+    private JLabel labelAiApiKey;
+    private JLabel labelAiBaseUrl;
+    private JLabel labelAiModel;
+    private JLabel labelAiRequestFormat;
+    private JLabel labelAiMaxPackets;
     private boolean syncingLanguageSelection;
 
     private ConfigurationPanel(Builder builder) {
@@ -96,6 +110,12 @@ public class ConfigurationPanel extends JPanel {
         this.checkBoxExtensionFilter = builder.checkBoxExtensionFilter;
         this.textFieldExtensionBlacklist = builder.textFieldExtensionBlacklist;
         this.textAreaAuthHeaders = builder.textAreaAuthHeaders;
+        this.textFieldAiApiKey = builder.textFieldAiApiKey;
+        this.textFieldAiBaseUrl = builder.textFieldAiBaseUrl;
+        this.textFieldAiModel = builder.textFieldAiModel;
+        this.comboBoxAiRequestFormat = builder.comboBoxAiRequestFormat;
+        this.spinnerAiMaxPackets = builder.spinnerAiMaxPackets;
+        this.btnAiTest = builder.btnAiTest;
         initLayout();
         comboBoxLanguage.setSelectedItem(I18n.getInstance().getCurrentLanguage());
         // 根据默认状态设置可编辑性
@@ -169,6 +189,8 @@ public class ConfigurationPanel extends JPanel {
         panelContent.add(buildFilterSection());
         panelContent.add(Box.createVerticalStrut(5));
         panelContent.add(buildAuthHeaderSection());
+        panelContent.add(Box.createVerticalStrut(5));
+        panelContent.add(buildAiConfigSection());
 
         JScrollPane scrollPane = new JScrollPane(panelContent);
         scrollPane.setBorder(null);
@@ -272,6 +294,66 @@ public class ConfigurationPanel extends JPanel {
         return panel;
     }
 
+    /** 构建 AI 配置区（API Key / Base URL / 模型 / 请求格式 / 最大包数 / 测试连接） */
+    private JPanel buildAiConfigSection() {
+        JPanel panel = new JPanel(new GridBagLayout());
+        borderAiConfig = new TitledBorder("");
+        panel.setBorder(borderAiConfig);
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(2, 2, 2, 2);
+        gbc.anchor = GridBagConstraints.WEST;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+
+        // API Key
+        addAiConfigRow(panel, gbc, 0, labelAiApiKey = new JLabel(), textFieldAiApiKey);
+        // Base URL
+        addAiConfigRow(panel, gbc, 1, labelAiBaseUrl = new JLabel(), textFieldAiBaseUrl);
+
+        // 模型 + 请求格式
+        gbc.gridx = 0;
+        gbc.gridy = 2;
+        gbc.weightx = 0.0;
+        gbc.fill = GridBagConstraints.NONE;
+        panel.add(labelAiModel = new JLabel(), gbc);
+        gbc.gridx = 1;
+        gbc.weightx = 1.0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        panel.add(textFieldAiModel, gbc);
+        gbc.gridx = 2;
+        gbc.weightx = 0.0;
+        gbc.fill = GridBagConstraints.NONE;
+        panel.add(labelAiRequestFormat = new JLabel(), gbc);
+        gbc.gridx = 3;
+        panel.add(comboBoxAiRequestFormat, gbc);
+
+        // 最大包数 + 测试按钮
+        gbc.gridx = 0;
+        gbc.gridy = 3;
+        gbc.weightx = 0.0;
+        gbc.fill = GridBagConstraints.NONE;
+        panel.add(labelAiMaxPackets = new JLabel(), gbc);
+        gbc.gridx = 1;
+        panel.add(spinnerAiMaxPackets, gbc);
+        gbc.gridx = 2;
+        panel.add(btnAiTest, gbc);
+        return panel;
+    }
+
+    /** 添加“标签 + 输入框”形式的一行（标签固定宽，输入框铺满剩余宽度） */
+    private void addAiConfigRow(JPanel panel, GridBagConstraints gbc, int row,
+                                JLabel label, JComponent field) {
+        gbc.gridx = 0;
+        gbc.gridy = row;
+        gbc.weightx = 0.0;
+        gbc.fill = GridBagConstraints.NONE;
+        panel.add(label, gbc);
+        gbc.gridx = 1;
+        gbc.weightx = 1.0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        panel.add(field, gbc);
+    }
+
     private void refreshTexts() {
         I18n i18n = I18n.getInstance();
         borderBasicControl.setTitle(i18n.text("configuration", "section.basic"));
@@ -279,6 +361,7 @@ public class ConfigurationPanel extends JPanel {
         borderToolTypeScope.setTitle(i18n.text("configuration", "section.toolScope"));
         borderRequestFilter.setTitle(i18n.text("configuration", "section.filter"));
         borderAuthHeaders.setTitle(i18n.text("configuration", "section.authHeaders"));
+        borderAiConfig.setTitle(i18n.text("configuration", "section.ai"));
 
         labelDisplay.setText(i18n.text("configuration", "label.display"));
         labelLanguage.setText(i18n.text("configuration", "label.language"));
@@ -294,6 +377,13 @@ public class ConfigurationPanel extends JPanel {
         checkBoxStatusCodeFilter.setText(i18n.text("configuration", "checkbox.statusCodeFilter"));
         checkBoxExtensionFilter.setText(i18n.text("configuration", "checkbox.extensionBlacklist"));
         checkBoxUnauthorizedOnly.setText(i18n.text("configuration", "checkbox.unauthorizedOnly"));
+
+        labelAiApiKey.setText(i18n.text("ai", "label.apiKey"));
+        labelAiBaseUrl.setText(i18n.text("ai", "label.baseUrl"));
+        labelAiModel.setText(i18n.text("ai", "label.model"));
+        labelAiRequestFormat.setText(i18n.text("ai", "label.requestFormat"));
+        labelAiMaxPackets.setText(i18n.text("ai", "label.maxPackets"));
+        btnAiTest.setText(i18n.text("ai", "button.test"));
 
         textAreaDomain.setToolTipText(i18n.text("configuration", "tooltip.domain"));
         textAreaPath.setToolTipText(i18n.text("configuration", "tooltip.path"));
@@ -451,6 +541,36 @@ public class ConfigurationPanel extends JPanel {
         return checkBoxUnauthorizedOnly;
     }
 
+    /** 获取 AI API Key 输入框 */
+    public JTextField getTextFieldAiApiKey() {
+        return textFieldAiApiKey;
+    }
+
+    /** 获取 AI Base URL 输入框 */
+    public JTextField getTextFieldAiBaseUrl() {
+        return textFieldAiBaseUrl;
+    }
+
+    /** 获取 AI 模型输入框 */
+    public JTextField getTextFieldAiModel() {
+        return textFieldAiModel;
+    }
+
+    /** 获取 AI 请求格式下拉框 */
+    public JComboBox<String> getComboBoxAiRequestFormat() {
+        return comboBoxAiRequestFormat;
+    }
+
+    /** 获取 AI 单次分析最大包数选择器 */
+    public JSpinner getSpinnerAiMaxPackets() {
+        return spinnerAiMaxPackets;
+    }
+
+    /** 获取 AI 测试连接按钮 */
+    public JButton getBtnAiTest() {
+        return btnAiTest;
+    }
+
     /**
      * 配置面板建造器
      */
@@ -476,6 +596,12 @@ public class ConfigurationPanel extends JPanel {
         private final JTextField textFieldExtensionBlacklist;
         private final PlaceholderTextArea textAreaAuthHeaders;
         private final JCheckBox checkBoxUnauthorizedOnly;
+        private final JTextField textFieldAiApiKey;
+        private final JTextField textFieldAiBaseUrl;
+        private final JTextField textFieldAiModel;
+        private final JComboBox<String> comboBoxAiRequestFormat;
+        private final JSpinner spinnerAiMaxPackets;
+        private final JButton btnAiTest;
 
         public Builder() {
             Font monoFont = new Font("Monospaced", Font.PLAIN, 12);
@@ -514,6 +640,17 @@ public class ConfigurationPanel extends JPanel {
             this.textAreaAuthHeaders.setWrapStyleWord(true);
 
             this.checkBoxUnauthorizedOnly = new JCheckBox("", false);
+
+            // AI 配置控件
+            this.textFieldAiApiKey = new JTextField();
+            this.textFieldAiApiKey.setFont(monoFont);
+            this.textFieldAiBaseUrl = new JTextField("https://api.openai.com/v1");
+            this.textFieldAiBaseUrl.setFont(monoFont);
+            this.textFieldAiModel = new JTextField("gpt-4o-mini");
+            this.textFieldAiModel.setFont(monoFont);
+            this.comboBoxAiRequestFormat = new JComboBox<>(model.AiConfigModel.REQUEST_FORMATS);
+            this.spinnerAiMaxPackets = new JSpinner(new SpinnerNumberModel(3, 1, 20, 1));
+            this.btnAiTest = new JButton();
         }
 
         /** 构建配置面板 */

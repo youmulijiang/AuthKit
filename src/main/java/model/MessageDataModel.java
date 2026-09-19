@@ -2,6 +2,7 @@ package model;
 
 import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;
+import core.normalize.BodyNormalizer;
 
 /**
  * HTTP 报文数据模型
@@ -15,6 +16,14 @@ public class MessageDataModel {
     private int statusCode;
     private int length;
     private int hash;
+
+    /** 响应体文本（不含响应头），供评分归一化与 Diff 比较使用 */
+    private String body;
+
+    /** L1 归一化缓存（懒加载，body 变更后失效） */
+    private String normalizedBodyL1;
+    /** L2 归一化缓存（懒加载） */
+    private String normalizedBodyL2;
 
     /** 响应 attributes 个数 */
     private int attributeCount;
@@ -100,6 +109,43 @@ public class MessageDataModel {
     /** 设置响应体哈希值 */
     public void setHash(int hash) {
         this.hash = hash;
+    }
+
+    /**
+     * 获取响应体文本（不含响应头）。
+     * 未显式设置时回退为完整响应文本。
+     */
+    public String getBody() {
+        if (body != null) {
+            return body;
+        }
+        return response != null ? response : "";
+    }
+
+    /** 设置响应体文本（含设置时清空归一化缓存） */
+    public void setBody(String body) {
+        this.body = body;
+        this.normalizedBodyL1 = null;
+        this.normalizedBodyL2 = null;
+    }
+
+    /**
+     * 获取指定级别的归一化响应体（带缓存）。
+     *
+     * @param level 归一化级别（1 或 2）
+     * @return 归一化后的响应体
+     */
+    public String getNormalizedBody(int level) {
+        if (level >= 2) {
+            if (normalizedBodyL2 == null) {
+                normalizedBodyL2 = BodyNormalizer.normalize(getBody(), 2);
+            }
+            return normalizedBodyL2;
+        }
+        if (normalizedBodyL1 == null) {
+            normalizedBodyL1 = BodyNormalizer.normalize(getBody(), 1);
+        }
+        return normalizedBodyL1;
     }
 
     /** 获取响应 attributes 个数 */

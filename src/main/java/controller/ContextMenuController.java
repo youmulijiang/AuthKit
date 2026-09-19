@@ -174,6 +174,13 @@ public class ContextMenuController {
         java.util.function.Consumer<List<HttpRequestResponse>> jwtScanHandler =
                 selectedItems -> runJwtScan(mainPanel, selectedItems, jwtScanService);
 
+        // AI 分析回调：切换到主界面 AI 选项卡，将数据包交给 AI 对话面板分析
+        java.util.function.Consumer<List<HttpRequestResponse>> aiAnalysisHandler =
+                selectedItems -> SwingUtilities.invokeLater(() -> {
+                    mainPanel.getTabbedRight().setSelectedComponent(mainPanel.getPanelAi());
+                    mainPanel.getPanelAi().sendPacketsAuto(selectedItems);
+                });
+
         AuthHistoryService authHistoryService = new AuthHistoryService(montoyaApi);
 
         // 更新为最新鉴权字段回调
@@ -199,6 +206,7 @@ public class ContextMenuController {
                         updateToLatestAuthHandler, selectFromHistoryHandler, deleteAuthHandler);
         contextMenuProvider.setIdorScanHandler(idorScanHandler);
         contextMenuProvider.setJwtScanHandler(jwtScanHandler);
+        contextMenuProvider.setAiAnalysisHandler(aiAnalysisHandler);
         montoyaApi.userInterface().registerContextMenuItemsProvider(contextMenuProvider);
     }
 

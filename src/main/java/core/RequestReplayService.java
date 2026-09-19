@@ -96,6 +96,7 @@ public class RequestReplayService {
         String contentType = response.headerValue("Content-Type");
 
         MessageDataModel model = new MessageDataModel(requestStr, responseStr, statusCode, length, hash, request, response);
+        model.setBody(response.bodyToString());
         model.setAttributeCount(attributeCount);
         model.setNote(note);
         model.setContentType(contentType != null ? contentType : "");

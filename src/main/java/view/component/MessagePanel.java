@@ -118,10 +118,12 @@ public class MessagePanel extends JPanel {
 
     /**
      * 设置报文内容（同时写入编辑器和缓存文本）
+     * 响应缓存仅保留响应体（bodyToString），供 Diff 比较使用，排除响应头。
      */
     public void setContent(HttpRequest request, HttpResponse response, String requestText, String responseText) {
         this.requestText = requestText != null ? requestText : "";
-        this.responseText = responseText != null ? responseText : "";
+        this.responseText = response != null ? response.bodyToString()
+                : (responseText != null ? responseText : "");
         if (request != null) {
             requestEditor.setRequest(request);
             combinedRequestEditor.setRequest(request);
@@ -171,7 +173,7 @@ public class MessagePanel extends JPanel {
 
     /**
      * 获取当前视图对应的报文文本，供 Diff 使用。
-     * 组合视图将请求与响应拼接后返回。
+     * Response 视图仅返回响应体（排除响应头）；组合视图将请求与响应体拼接后返回。
      */
     public String getSelectedText() {
         return switch (getSelectedView()) {
