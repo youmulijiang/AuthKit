@@ -41,8 +41,8 @@ class HttpHeaderUtilsTest {
     }
 
     @Test
-    @DisplayName("removeAuthHeaders 配置非空时应同时移除内置关键字和配置匹配的认证头")
-    void removeAuthHeaders_withConfiguredHeaders_shouldRemoveBothBuiltInAndConfigured() {
+    @DisplayName("removeAuthHeaders 配置非空时应只移除配置关键字匹配的认证头（内置关键字不参与）")
+    void removeAuthHeaders_withConfiguredHeaders_shouldOnlyRemoveConfigured() {
         HttpRequest original = mock(HttpRequest.class);
         HttpHeader cookieHeader = mock(HttpHeader.class);
         HttpHeader customHeader = mock(HttpHeader.class);
@@ -52,17 +52,17 @@ class HttpHeaderUtilsTest {
         when(customHeader.name()).thenReturn("X-MyApp-Id");
         when(original.headers()).thenReturn(List.of(cookieHeader, customHeader));
         when(original.parameters(HttpParameterType.COOKIE)).thenReturn(List.of());
-        when(original.withRemovedHeaders(List.of(cookieHeader, customHeader))).thenReturn(afterHeaders);
+        when(original.withRemovedHeaders(List.of(customHeader))).thenReturn(afterHeaders);
 
         HttpRequest result = HttpHeaderUtils.removeAuthHeaders(original, List.of("MyApp"));
 
         assertSame(afterHeaders, result);
-        verify(original).withRemovedHeaders(List.of(cookieHeader, customHeader));
+        verify(original).withRemovedHeaders(List.of(customHeader));
     }
 
     @Test
-    @DisplayName("removeAuthHeaders 应不区分大小写匹配鉴权头")
-    void removeAuthHeaders_shouldMatchCaseInsensitively() {
+    @DisplayName("removeAuthHeaders 配置关键字应不区分大小写匹配")
+    void removeAuthHeaders_shouldMatchConfiguredCaseInsensitively() {
         HttpRequest original = mock(HttpRequest.class);
         HttpHeader upperAuth = mock(HttpHeader.class);
         HttpHeader mixedCustom = mock(HttpHeader.class);
@@ -72,17 +72,17 @@ class HttpHeaderUtilsTest {
         when(mixedCustom.name()).thenReturn("X-MyApp-Id");
         when(original.headers()).thenReturn(List.of(upperAuth, mixedCustom));
         when(original.parameters(HttpParameterType.COOKIE)).thenReturn(List.of());
-        when(original.withRemovedHeaders(List.of(upperAuth, mixedCustom))).thenReturn(afterHeaders);
+        when(original.withRemovedHeaders(List.of(mixedCustom))).thenReturn(afterHeaders);
 
         HttpRequest result = HttpHeaderUtils.removeAuthHeaders(original, List.of("MYAPP"));
 
         assertSame(afterHeaders, result);
-        verify(original).withRemovedHeaders(List.of(upperAuth, mixedCustom));
+        verify(original).withRemovedHeaders(List.of(mixedCustom));
     }
 
     @Test
-    @DisplayName("extractAuthHeaders 配置非空时应同时提取内置关键字和配置匹配的认证头")
-    void extractAuthHeaders_withConfiguredHeaders_shouldExtractBothBuiltInAndConfigured() {
+    @DisplayName("extractAuthHeaders 配置非空时应只提取配置关键字匹配的认证头")
+    void extractAuthHeaders_withConfiguredHeaders_shouldExtractOnlyConfigured() {
         HttpRequestResponse reqResp = mock(HttpRequestResponse.class);
         HttpRequest request = mock(HttpRequest.class);
         HttpHeader cookieHeader = mock(HttpHeader.class);
@@ -97,6 +97,6 @@ class HttpHeaderUtilsTest {
 
         String result = HttpHeaderUtils.extractAuthHeaders(List.of(reqResp), List.of("MyApp"));
 
-        assertEquals("Cookie: sid=abc\nX-MyApp-Id: custom", result);
+        assertEquals("X-MyApp-Id: custom", result);
     }
 }

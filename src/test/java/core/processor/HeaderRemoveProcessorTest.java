@@ -16,7 +16,7 @@ import static org.mockito.Mockito.*;
 
 /**
  * HeaderRemoveProcessor 单元测试
- * 该处理器用于未授权场景，按内置关键字和配置关键字的并集移除鉴权头，不区分大小写。
+ * 该处理器用于未授权场景：配置非空时仅按配置关键字移除，配置为空时回退到内置鉴权头关键字。
  */
 class HeaderRemoveProcessorTest {
 
@@ -38,8 +38,8 @@ class HeaderRemoveProcessorTest {
     }
 
     @Test
-    @DisplayName("process 配置非空时应同时移除内置关键字和配置匹配的认证头")
-    void process_shouldRemoveBothBuiltInAndConfiguredHeaders() {
+    @DisplayName("process 配置非空时应只移除配置关键字匹配的认证头（内置关键字不参与）")
+    void process_shouldOnlyRemoveConfiguredHeaders() {
         HttpRequest original = mock(HttpRequest.class);
         HttpHeader cookie = mock(HttpHeader.class);
         when(cookie.name()).thenReturn("Cookie");
@@ -49,13 +49,13 @@ class HeaderRemoveProcessorTest {
         when(original.parameters(HttpParameterType.COOKIE)).thenReturn(List.of());
 
         HttpRequest afterRemove = mock(HttpRequest.class);
-        when(original.withRemovedHeaders(List.of(cookie, customAuth))).thenReturn(afterRemove);
+        when(original.withRemovedHeaders(List.of(customAuth))).thenReturn(afterRemove);
 
         AuthUserModel user = new AuthUserModel("Unauthorized");
         HttpRequest result = processor.process(original, user);
 
         assertSame(afterRemove, result);
-        verify(original).withRemovedHeaders(List.of(cookie, customAuth));
+        verify(original).withRemovedHeaders(List.of(customAuth));
     }
 
     @Test

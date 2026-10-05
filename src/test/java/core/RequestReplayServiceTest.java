@@ -74,8 +74,8 @@ class RequestReplayServiceTest {
     }
 
     @Test
-    @DisplayName("replayUnauthorized 应同时移除内置关键字和配置匹配的认证头")
-    void replayUnauthorized_shouldRemoveBothBuiltInAndConfiguredHeaders() {
+    @DisplayName("replayUnauthorized 配置非空时应只移除配置关键字匹配的认证头")
+    void replayUnauthorized_shouldOnlyRemoveConfiguredHeaders() {
         HttpRequest original = mock(HttpRequest.class);
         HttpHeader authHeader = mock(HttpHeader.class);
         HttpHeader customHeader = mock(HttpHeader.class);
@@ -85,7 +85,7 @@ class RequestReplayServiceTest {
         when(original.parameters(HttpParameterType.COOKIE)).thenReturn(List.of());
 
         HttpRequest afterRemove = mock(HttpRequest.class);
-        when(original.withRemovedHeaders(List.of(authHeader, customHeader))).thenReturn(afterRemove);
+        when(original.withRemovedHeaders(List.of(customHeader))).thenReturn(afterRemove);
 
         HttpRequestResponse mockResponse = mock(HttpRequestResponse.class);
         when(http.sendRequest(afterRemove)).thenReturn(mockResponse);
@@ -93,7 +93,7 @@ class RequestReplayServiceTest {
         HttpRequestResponse result = service.replayUnauthorized(original, List.of("MyApp"));
 
         assertSame(mockResponse, result);
-        verify(original).withRemovedHeaders(List.of(authHeader, customHeader));
+        verify(original).withRemovedHeaders(List.of(customHeader));
         verify(http).sendRequest(afterRemove);
     }
 
