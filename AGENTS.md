@@ -35,6 +35,6 @@ mvn test -Dtest=ClassName#methodName      # 运行单个测试方法
 
 - [文档导航](docs/README.md)
 - [架构说明](docs/architecture.md)
+- [AI 分析模块](docs/ai-analysis.md)
 - [开发指南](docs/development.md)
 - [用户使用说明](README.md)
-- [历史设计与实施记录](docs/superpowers/)

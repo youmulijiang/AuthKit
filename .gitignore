@@ -44,3 +44,7 @@ out/
 .trae/
 .superpowers/
 .workbuddy/
+.pi/
+AGENTS.md
+CLAUDE.md
+.claude/
