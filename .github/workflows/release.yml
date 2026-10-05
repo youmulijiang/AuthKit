@@ -9,7 +9,29 @@ permissions:
   contents: write
 
 jobs:
+  # 版本号单一来源是 pom.xml；发布前先确认标签与之一致，避免打出的包与代码版本号不符
+  verify-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify tag matches pom version
+        id: check
+        run: |
+          POM_VERSION=$(grep -m1 -oP '(?<=^  <version>)[^<]+' pom.xml)
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$POM_VERSION" >> "$GITHUB_OUTPUT"
+          echo "pom=$POM_VERSION tag=$TAG_VERSION"
+          if [ "$POM_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::标签 $GITHUB_REF_NAME 与 pom.xml 版本 $POM_VERSION 不一致，请先对齐版本号再打标签"
+            exit 1
+          fi
+
   build:
+    needs: verify-version
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -38,19 +60,26 @@ jobs:
           test -n "$JAR_FILE"
           jar tf "$JAR_FILE" | grep -q "com/auth0/jwt/algorithms/Algorithm.class"
 
+      - name: Verify embedded version
+        run: |
+          JAR_FILE=$(find target -name "AuthKit-*.jar" -not -name "*-sources*" -not -name "*-javadoc*" | head -1)
+          EMBEDDED=$(unzip -p "$JAR_FILE" version.properties | grep -oP '(?<=version=).*')
+          echo "jar=$EMBEDDED pom=${{ needs.verify-version.outputs.version }}"
+          test "$EMBEDDED" = "${{ needs.verify-version.outputs.version }}"
+
       - name: Rename JAR
         run: |
           JAR_FILE=$(find target -name "AuthKit-*.jar" -not -name "*-sources*" -not -name "*-javadoc*" | head -1)
-          cp "$JAR_FILE" "target/AuthKit-java${{ matrix.java-version }}.jar"
+          cp "$JAR_FILE" "target/AuthKit-${{ needs.verify-version.outputs.version }}-java${{ matrix.java-version }}.jar"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: AuthKit-java${{ matrix.java-version }}
-          path: target/AuthKit-java${{ matrix.java-version }}.jar
+          path: target/AuthKit-${{ needs.verify-version.outputs.version }}-java${{ matrix.java-version }}.jar
 
   release:
-    needs: build
+    needs: [verify-version, build]
     runs-on: ubuntu-latest
 
     steps:
@@ -65,5 +94,5 @@ jobs:
           name: Release ${{ github.ref_name }}
           generate_release_notes: true
           files: |
-            artifacts/AuthKit-java17/AuthKit-java17.jar
-            artifacts/AuthKit-java21/AuthKit-java21.jar
+            artifacts/AuthKit-java17/AuthKit-${{ needs.verify-version.outputs.version }}-java17.jar
+            artifacts/AuthKit-java21/AuthKit-${{ needs.verify-version.outputs.version }}-java21.jar
