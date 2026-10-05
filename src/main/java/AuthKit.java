@@ -36,8 +36,35 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class AuthKit implements BurpExtension {
 
-    private static final String AuthKit_Version = "1.9.5";
+    /**
+     * 插件版本：唯一来源是 pom.xml 的 {@code <version>}，打包时经资源过滤写入
+     * {@code version.properties}，此处读取后用于欢迎横幅与日志，避免两处各写一份。
+     */
+    private static final String AUTHKIT_VERSION = loadVersion();
     private static final AtomicBoolean WELCOME_BANNER_PRINTED = new AtomicBoolean(false);
+
+    /**
+     * 读取打包时写入的版本号；直接从 classes 目录运行（如 IDE 调试）时回退到 JAR manifest。
+     *
+     * @return 版本号，均不可用时返回 "unknown"
+     */
+    private static String loadVersion() {
+        try (java.io.InputStream in = AuthKit.class.getResourceAsStream("/version.properties")) {
+            if (in != null) {
+                java.util.Properties props = new java.util.Properties();
+                props.load(new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8));
+                String version = props.getProperty("version");
+                if (version != null && !version.isBlank()) {
+                    return version.trim();
+                }
+            }
+        } catch (Exception ex) {
+            LogUtils.INSTANCE.error("读取版本号失败，回退到 manifest", ex);
+        }
+        Package pkg = AuthKit.class.getPackage();
+        String manifestVersion = pkg != null ? pkg.getImplementationVersion() : null;
+        return manifestVersion != null && !manifestVersion.isBlank() ? manifestVersion : "unknown";
+    }
 
     private ExecutorService executor;
     private ExecutorService diffExecutor;
@@ -92,6 +119,8 @@ public class AuthKit implements BurpExtension {
         dataTableController.bindAll();
         diffController.bind();
         contextMenuController.register();
+        // AI 对话自动附带上下文：提供数据表当前选中样本
+        mainPanel.setSelectedSampleProvider(dataTableController::getSelectedSample);
 
         // 注册 Intruder 随机 IP / XFF 头 payload 生成器
         montoyaApi.intruder().registerPayloadGeneratorProvider(
@@ -133,7 +162,7 @@ public class AuthKit implements BurpExtension {
                 "[   Pwn The Planet, One HTTP at a Time  ]\n" +
                         "[#] Author: youmulijiang\n" +
                         "[#] Github: https://github.com/youmulijiang\n" +
-                        "[#] Version: %s\n", AuthKit_Version
+                        "[#] Version: %s\n", AUTHKIT_VERSION
         ));
     }
 }

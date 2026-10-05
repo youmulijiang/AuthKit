@@ -2,6 +2,8 @@ package view;
 
 import burp.api.montoya.MontoyaApi;
 import model.AiConfigModel;
+import model.CompareSampleModel;
+import model.MessageDataModel;
 import utils.I18n;
 import view.binding.AiConfigBinder;
 import view.component.AiChatPanel;
@@ -15,6 +17,8 @@ import view.component.UserPanel;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 插件主面板
@@ -35,6 +39,8 @@ public class MainPanel extends JPanel {
     private final AiChatPanel panelAi;
     /** AI 配置模型（Configuration 选项卡编辑，AI 对话选项卡读取） */
     private final AiConfigModel aiConfigModel;
+    /** 数据表选中样本提供者（AI 自动附带上下文使用），由装配根注入 */
+    private java.util.function.Supplier<CompareSampleModel> selectedSampleProvider = () -> null;
 
     /**
      * 构造主面板
@@ -54,6 +60,8 @@ public class MainPanel extends JPanel {
         aiConfigModel.load();
         AiConfigBinder.bind(panelConfiguration, aiConfigModel);
         this.panelAi = new AiChatPanel(aiConfigModel);
+        // AI 数据包来源工具：模型可请求读取 Proxy 历史 / 站点地图，实际报文由用户在弹窗中挑选
+        panelAi.setPacketSourceService(new core.PacketSourceService(api));
         this.tabbedRight = new JTabbedPane();
         initLayout();
         bindEvents();
@@ -115,6 +123,56 @@ public class MainPanel extends JPanel {
             panelMetadataTable.renameAuthRow(oldName, newName);
             panelCompare.renameAuthObject(oldName, newName);
         });
+
+        // AI 对话自动附带上下文：数据表选中记录 → 合成 Original/Unauthorized/各用户数据包
+        panelAi.setContextPacketsSupplier(this::collectAiContextPackets);
+    }
+
+    /**
+     * 从数据表当前选中记录合成 AI 分析数据包列表（Original / Unauthorized / 各用户）。
+     * 依赖 MessageDataModel 中保留的 Montoya 原始对象重建 HttpRequestResponse。
+     *
+     * @return 数据包列表，无选中记录或无有效报文数据时返回空列表
+     */
+    private java.util.List<burp.api.montoya.http.message.HttpRequestResponse> collectAiContextPackets() {
+        return toPackets(selectedSampleProvider.get());
+    }
+
+    /**
+     * 把一条比较样本转换为 AI 可分析的数据包列表（Original / Unauthorized / 各用户）。
+     * 供数据包工具取数与数据表右键"发送给 AI 分析"复用。
+     *
+     * @param sample 比较样本，可为 null
+     * @return 数据包列表，样本为空或无有效报文时返回空列表
+     */
+    public static java.util.List<burp.api.montoya.http.message.HttpRequestResponse> toPackets(
+            CompareSampleModel sample) {
+        List<burp.api.montoya.http.message.HttpRequestResponse> packets = new ArrayList<>();
+        if (sample == null) {
+            return packets;
+        }
+        for (String authName : sample.getAuthNamesOrdered()) {
+            MessageDataModel data = sample.getMessageData(authName);
+            if (data == null || data.getHttpRequest() == null) {
+                continue;
+            }
+            burp.api.montoya.http.message.responses.HttpResponse response =
+                    data.getHttpResponse() != null
+                            ? data.getHttpResponse()
+                            : burp.api.montoya.http.message.responses.HttpResponse.httpResponse("");
+            packets.add(burp.api.montoya.http.message.HttpRequestResponse.httpRequestResponse(
+                    data.getHttpRequest(), response));
+        }
+        return packets;
+    }
+
+    /**
+     * 注入数据表选中样本提供者（由 AuthKit 装配根在创建 DataTableController 后调用）
+     *
+     * @param provider 返回数据表当前选中样本，无选中返回 null
+     */
+    public void setSelectedSampleProvider(java.util.function.Supplier<CompareSampleModel> provider) {
+        this.selectedSampleProvider = provider;
     }
 
     private void refreshTexts() {

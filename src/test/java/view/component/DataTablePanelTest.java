@@ -43,6 +43,10 @@ class DataTablePanelTest {
             @Override
             public void copyUrls(List<Integer> modelRows) {
             }
+
+            @Override
+            public void sendToAi(List<Integer> modelRows) {
+            }
         });
 
         SwingUtilities.invokeAndWait(() -> {

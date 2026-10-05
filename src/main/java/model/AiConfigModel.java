@@ -25,21 +25,17 @@ public class AiConfigModel {
     private static final String PREF_KEY_BASE_URL = "ai.baseUrl";
     private static final String PREF_KEY_MODEL = "ai.model";
     private static final String PREF_KEY_FORMAT = "ai.format";
-    private static final String PREF_KEY_MAX_PACKETS = "ai.maxPackets";
 
     private String apiKey;
     private String baseUrl;
     private String model;
     private String requestFormat;
-    /** 单次分析附带的最大数据包数量，防止提示词过长 */
-    private int maxPackets;
 
     public AiConfigModel() {
         this.apiKey = "";
         this.baseUrl = "https://api.openai.com/v1";
         this.model = "gpt-4o-mini";
         this.requestFormat = FORMAT_OPENAI;
-        this.maxPackets = 3;
     }
 
     /** 从本地 Preferences 恢复配置 */
@@ -49,7 +45,6 @@ public class AiConfigModel {
         this.baseUrl = prefs.get(PREF_KEY_BASE_URL, this.baseUrl);
         this.model = prefs.get(PREF_KEY_MODEL, this.model);
         this.requestFormat = prefs.get(PREF_KEY_FORMAT, this.requestFormat);
-        this.maxPackets = prefs.getInt(PREF_KEY_MAX_PACKETS, this.maxPackets);
     }
 
     /** 将配置持久化到本地 Preferences */
@@ -59,7 +54,6 @@ public class AiConfigModel {
         prefs.put(PREF_KEY_BASE_URL, baseUrl == null ? "" : baseUrl);
         prefs.put(PREF_KEY_MODEL, model == null ? "" : model);
         prefs.put(PREF_KEY_FORMAT, requestFormat == null ? FORMAT_OPENAI : requestFormat);
-        prefs.putInt(PREF_KEY_MAX_PACKETS, maxPackets);
     }
 
     public String getApiKey() {
@@ -94,11 +88,4 @@ public class AiConfigModel {
         this.requestFormat = requestFormat;
     }
 
-    public int getMaxPackets() {
-        return maxPackets;
-    }
-
-    public void setMaxPackets(int maxPackets) {
-        this.maxPackets = maxPackets;
-    }
 }

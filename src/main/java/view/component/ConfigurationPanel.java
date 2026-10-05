@@ -8,11 +8,10 @@ import java.awt.*;
 
 /**
  * 配置面板
- * 位于右侧 TabbedPane 的 Configuration 选项卡中，包含四个功能区：
- * 1. 基础控制区 - 插件启停开关、清空数据按钮
- * 2. 域名作用域 - 目标域名白名单
- * 3. 请求过滤规则 - HTTP 方法过滤、路径过滤、状态码过滤
- * 4. 认证头配置 - 未授权检测时需要移除的认证头列表
+ * 位于右侧 TabbedPane 的 Configuration 选项卡中，布局为常驻顶栏 + JTabbedPane 分组：
+ * 1. 常驻顶栏 - 插件启停开关、清空数据按钮、显示指标、语言、仅显示越权
+ * 2. 捕获过滤 Tab - 捕获范围（域名白名单、Tool Type Scope）+ 请求过滤 + 认证头配置
+ * 3. AI 分析 Tab - AI 分析服务配置
  */
 public class ConfigurationPanel extends JPanel {
 
@@ -71,7 +70,6 @@ public class ConfigurationPanel extends JPanel {
     private final JTextField textFieldAiBaseUrl;
     private final JTextField textFieldAiModel;
     private final JComboBox<String> comboBoxAiRequestFormat;
-    private final JSpinner spinnerAiMaxPackets;
     private final JButton btnAiTest;
 
     private TitledBorder borderBasicControl;
@@ -80,13 +78,13 @@ public class ConfigurationPanel extends JPanel {
     private TitledBorder borderRequestFilter;
     private TitledBorder borderAuthHeaders;
     private TitledBorder borderAiConfig;
+    private JTabbedPane tabbedPane;
     private JLabel labelDisplay;
     private JLabel labelLanguage;
     private JLabel labelAiApiKey;
     private JLabel labelAiBaseUrl;
     private JLabel labelAiModel;
     private JLabel labelAiRequestFormat;
-    private JLabel labelAiMaxPackets;
     private boolean syncingLanguageSelection;
 
     private ConfigurationPanel(Builder builder) {
@@ -114,7 +112,6 @@ public class ConfigurationPanel extends JPanel {
         this.textFieldAiBaseUrl = builder.textFieldAiBaseUrl;
         this.textFieldAiModel = builder.textFieldAiModel;
         this.comboBoxAiRequestFormat = builder.comboBoxAiRequestFormat;
-        this.spinnerAiMaxPackets = builder.spinnerAiMaxPackets;
         this.btnAiTest = builder.btnAiTest;
         initLayout();
         comboBoxLanguage.setSelectedItem(I18n.getInstance().getCurrentLanguage());
@@ -174,27 +171,49 @@ public class ConfigurationPanel extends JPanel {
         // comboBoxDisplayMetric 和 comboBoxLanguage 始终可用
     }
 
-    /** 初始化布局 */
+    /** 初始化布局：常驻顶栏 + JTabbedPane 分组 */
     private void initLayout() {
         setLayout(new BorderLayout());
-        JPanel panelContent = new JPanel();
-        panelContent.setLayout(new BoxLayout(panelContent, BoxLayout.Y_AXIS));
+        add(buildBasicControlSection(), BorderLayout.NORTH);
+        add(buildTabbedPane(), BorderLayout.CENTER);
+    }
 
-        panelContent.add(buildBasicControlSection());
-        panelContent.add(Box.createVerticalStrut(5));
-        panelContent.add(buildDomainSection());
-        panelContent.add(Box.createVerticalStrut(5));
-        panelContent.add(buildToolTypeScopeSection());
-        panelContent.add(Box.createVerticalStrut(5));
-        panelContent.add(buildFilterSection());
-        panelContent.add(Box.createVerticalStrut(5));
-        panelContent.add(buildAuthHeaderSection());
-        panelContent.add(Box.createVerticalStrut(5));
-        panelContent.add(buildAiConfigSection());
+    /** 构建 Tab 分组面板：捕获过滤（捕获范围 + 过滤规则 + 认证配置）/ AI 分析 */
+    private JTabbedPane buildTabbedPane() {
+        tabbedPane = new JTabbedPane();
 
-        JScrollPane scrollPane = new JScrollPane(panelContent);
-        scrollPane.setBorder(null);
-        add(scrollPane, BorderLayout.CENTER);
+        // Tab 1：捕获过滤（捕获范围 + 请求过滤 + 认证头配置）
+        JPanel captureFilterTab = buildVerticalTabContent(
+                buildDomainSection(),
+                buildToolTypeScopeSection(),
+                buildFilterSection(),
+                buildAuthHeaderSection());
+        tabbedPane.addTab("", new JScrollPane(captureFilterTab));
+
+        // Tab 2：AI 分析
+        JPanel aiTab = new JPanel(new BorderLayout());
+        aiTab.add(buildAiConfigSection(), BorderLayout.NORTH);
+        tabbedPane.addTab("", new JScrollPane(aiTab));
+
+        return tabbedPane;
+    }
+
+    /**
+     * 构建 Tab 内纵向堆叠内容面板。
+     * 实现 Scrollable 接口让内容宽度跟随视口（不产生横向滚动），
+     * 高度按首选值纵向滚动。
+     */
+    private JPanel buildVerticalTabContent(JComponent... sections) {
+        JPanel panel = new ScrollablePanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        for (int i = 0; i < sections.length; i++) {
+            if (i > 0) {
+                panel.add(Box.createVerticalStrut(5));
+            }
+            panel.add(sections[i]);
+        }
+        panel.add(Box.createVerticalGlue());
+        return panel;
     }
 
     /** 构建基础控制区 */
@@ -294,7 +313,7 @@ public class ConfigurationPanel extends JPanel {
         return panel;
     }
 
-    /** 构建 AI 配置区（API Key / Base URL / 模型 / 请求格式 / 最大包数 / 测试连接） */
+    /** 构建 AI 配置区（API Key / Base URL / 模型 / 请求格式 / 测试连接） */
     private JPanel buildAiConfigSection() {
         JPanel panel = new JPanel(new GridBagLayout());
         borderAiConfig = new TitledBorder("");
@@ -327,15 +346,11 @@ public class ConfigurationPanel extends JPanel {
         gbc.gridx = 3;
         panel.add(comboBoxAiRequestFormat, gbc);
 
-        // 最大包数 + 测试按钮
-        gbc.gridx = 0;
+        // 测试按钮
+        gbc.gridx = 2;
         gbc.gridy = 3;
         gbc.weightx = 0.0;
         gbc.fill = GridBagConstraints.NONE;
-        panel.add(labelAiMaxPackets = new JLabel(), gbc);
-        gbc.gridx = 1;
-        panel.add(spinnerAiMaxPackets, gbc);
-        gbc.gridx = 2;
         panel.add(btnAiTest, gbc);
         return panel;
     }
@@ -363,6 +378,11 @@ public class ConfigurationPanel extends JPanel {
         borderAuthHeaders.setTitle(i18n.text("configuration", "section.authHeaders"));
         borderAiConfig.setTitle(i18n.text("configuration", "section.ai"));
 
+        if (tabbedPane != null) {
+            tabbedPane.setTitleAt(0, i18n.text("configuration", "tab.captureFilter"));
+            tabbedPane.setTitleAt(1, i18n.text("configuration", "tab.ai"));
+        }
+
         labelDisplay.setText(i18n.text("configuration", "label.display"));
         labelLanguage.setText(i18n.text("configuration", "label.language"));
         btnClearTable.setText(i18n.text("configuration", "button.clear"));
@@ -382,7 +402,6 @@ public class ConfigurationPanel extends JPanel {
         labelAiBaseUrl.setText(i18n.text("ai", "label.baseUrl"));
         labelAiModel.setText(i18n.text("ai", "label.model"));
         labelAiRequestFormat.setText(i18n.text("ai", "label.requestFormat"));
-        labelAiMaxPackets.setText(i18n.text("ai", "label.maxPackets"));
         btnAiTest.setText(i18n.text("ai", "button.test"));
 
         textAreaDomain.setToolTipText(i18n.text("configuration", "tooltip.domain"));
@@ -561,11 +580,6 @@ public class ConfigurationPanel extends JPanel {
         return comboBoxAiRequestFormat;
     }
 
-    /** 获取 AI 单次分析最大包数选择器 */
-    public JSpinner getSpinnerAiMaxPackets() {
-        return spinnerAiMaxPackets;
-    }
-
     /** 获取 AI 测试连接按钮 */
     public JButton getBtnAiTest() {
         return btnAiTest;
@@ -600,7 +614,6 @@ public class ConfigurationPanel extends JPanel {
         private final JTextField textFieldAiBaseUrl;
         private final JTextField textFieldAiModel;
         private final JComboBox<String> comboBoxAiRequestFormat;
-        private final JSpinner spinnerAiMaxPackets;
         private final JButton btnAiTest;
 
         public Builder() {
@@ -649,7 +662,6 @@ public class ConfigurationPanel extends JPanel {
             this.textFieldAiModel = new JTextField("gpt-4o-mini");
             this.textFieldAiModel.setFont(monoFont);
             this.comboBoxAiRequestFormat = new JComboBox<>(model.AiConfigModel.REQUEST_FORMATS);
-            this.spinnerAiMaxPackets = new JSpinner(new SpinnerNumberModel(3, 1, 20, 1));
             this.btnAiTest = new JButton();
         }
 
@@ -671,6 +683,38 @@ public class ConfigurationPanel extends JPanel {
         @Override
         public String toString() {
             return label;
+        }
+    }
+
+    /**
+     * 跟随视口宽度的滚动面板：宽度始终铺满 JScrollPane 视口（无横向滚动条），
+     * 高度按内容首选值纵向滚动。用于 Tab 内容区。
+     */
+    private static class ScrollablePanel extends JPanel implements Scrollable {
+
+        @Override
+        public Dimension getPreferredScrollableViewportSize() {
+            return getPreferredSize();
+        }
+
+        @Override
+        public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
+            return 20;
+        }
+
+        @Override
+        public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction) {
+            return orientation == SwingConstants.VERTICAL ? visibleRect.height : visibleRect.width;
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportWidth() {
+            return true;
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportHeight() {
+            return false;
         }
     }
 }

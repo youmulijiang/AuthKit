@@ -71,17 +71,23 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
     /** 随机 IP 爆破：将带伪造 IP 请求头的请求发送到 Intruder */
     private final Consumer<HttpRequest> sendToIntruderHandler;
 
-    /** 403 bypass 扫描回调 */
-    private final Consumer<List<HttpRequestResponse>> bypass403ScanHandler;
+    /** Scan 一级菜单：收纳 403 绕过 / IDOR / JWT / AI 越权扫描与"全部扫描" */
+    private final Consumer<List<HttpRequestResponse>> scanAllHandler;
 
-    /** IDOR 扫描回调 */
+    /** 403 bypass 扫描回调（Scan 二级菜单单独触发） */
+    private Consumer<List<HttpRequestResponse>> bypass403ScanHandler = items -> {};
+
+    /** IDOR 扫描回调（Scan 二级菜单单独触发） */
     private Consumer<List<HttpRequestResponse>> idorScanHandler = items -> {};
 
-    /** JWT 扫描回调 */
+    /** JWT 扫描回调（Scan 二级菜单单独触发） */
     private Consumer<List<HttpRequestResponse>> jwtScanHandler = items -> {};
 
     /** AI 分析回调：将选中数据包发送到 JWT 面板的 AI 对话 */
     private Consumer<List<HttpRequestResponse>> aiAnalysisHandler = items -> {};
+
+    /** AI 越权扫描回调（打开扫描弹窗并启动 AI 扫描） */
+    private Consumer<List<HttpRequestResponse>> aiScanHandler = items -> {};
 
     /** 更新为最新鉴权字段回调：(event, selectedItems) */
     private final BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> updateToLatestAuthHandler;
@@ -139,10 +145,10 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
                                     FakeIpService fakeIpService,
                                     Consumer<HttpRequest> sendToRepeaterHandler,
                                     Consumer<HttpRequest> sendToIntruderHandler,
-                                    Consumer<List<HttpRequestResponse>> bypass403ScanHandler) {
+                                    Consumer<List<HttpRequestResponse>> scanAllHandler) {
         this(userNamesSupplier, enabledSupplier, enablePluginHandler, sendHandler, extractHandler,
                 createUserHandler, List::of, fakeIpService, sendToRepeaterHandler, sendToIntruderHandler,
-                bypass403ScanHandler, (event, items) -> {}, (event, items) -> {});
+                scanAllHandler, (event, items) -> {}, (event, items) -> {});
     }
 
     public AuthContextMenuProvider(Supplier<List<String>> userNamesSupplier,
@@ -155,10 +161,10 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
                                     FakeIpService fakeIpService,
                                     Consumer<HttpRequest> sendToRepeaterHandler,
                                     Consumer<HttpRequest> sendToIntruderHandler,
-                                    Consumer<List<HttpRequestResponse>> bypass403ScanHandler) {
+                                    Consumer<List<HttpRequestResponse>> scanAllHandler) {
         this(userNamesSupplier, enabledSupplier, enablePluginHandler, sendHandler, extractHandler,
                 createUserHandler, authHeaderKeywordsSupplier, fakeIpService, sendToRepeaterHandler,
-                sendToIntruderHandler, bypass403ScanHandler, (event, items) -> {}, (event, items) -> {});
+                sendToIntruderHandler, scanAllHandler, (event, items) -> {}, (event, items) -> {});
     }
 
     public AuthContextMenuProvider(Supplier<List<String>> userNamesSupplier,
@@ -170,12 +176,12 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
                                     FakeIpService fakeIpService,
                                     Consumer<HttpRequest> sendToRepeaterHandler,
                                     Consumer<HttpRequest> sendToIntruderHandler,
-                                    Consumer<List<HttpRequestResponse>> bypass403ScanHandler,
+                                    Consumer<List<HttpRequestResponse>> scanAllHandler,
                                     BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> updateToLatestAuthHandler,
                                     BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> selectFromHistoryHandler) {
         this(userNamesSupplier, enabledSupplier, enablePluginHandler, sendHandler, extractHandler,
                 createUserHandler, List::of, fakeIpService, sendToRepeaterHandler, sendToIntruderHandler,
-                bypass403ScanHandler, updateToLatestAuthHandler, selectFromHistoryHandler, (event, items) -> {});
+                scanAllHandler, updateToLatestAuthHandler, selectFromHistoryHandler, (event, items) -> {});
     }
 
     public AuthContextMenuProvider(Supplier<List<String>> userNamesSupplier,
@@ -188,12 +194,12 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
                                     FakeIpService fakeIpService,
                                     Consumer<HttpRequest> sendToRepeaterHandler,
                                     Consumer<HttpRequest> sendToIntruderHandler,
-                                    Consumer<List<HttpRequestResponse>> bypass403ScanHandler,
+                                    Consumer<List<HttpRequestResponse>> scanAllHandler,
                                     BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> updateToLatestAuthHandler,
                                     BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> selectFromHistoryHandler) {
         this(userNamesSupplier, enabledSupplier, enablePluginHandler, sendHandler, extractHandler,
                 createUserHandler, authHeaderKeywordsSupplier, fakeIpService, sendToRepeaterHandler,
-                sendToIntruderHandler, bypass403ScanHandler, updateToLatestAuthHandler,
+                sendToIntruderHandler, scanAllHandler, updateToLatestAuthHandler,
                 selectFromHistoryHandler, (event, items) -> {});
     }
 
@@ -206,13 +212,13 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
                                     FakeIpService fakeIpService,
                                     Consumer<HttpRequest> sendToRepeaterHandler,
                                     Consumer<HttpRequest> sendToIntruderHandler,
-                                    Consumer<List<HttpRequestResponse>> bypass403ScanHandler,
+                                    Consumer<List<HttpRequestResponse>> scanAllHandler,
                                     BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> updateToLatestAuthHandler,
                                     BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> selectFromHistoryHandler,
                                     BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> deleteAuthHandler) {
         this(userNamesSupplier, enabledSupplier, enablePluginHandler, sendHandler, extractHandler,
                 createUserHandler, List::of, fakeIpService, sendToRepeaterHandler, sendToIntruderHandler,
-                bypass403ScanHandler, updateToLatestAuthHandler, selectFromHistoryHandler, deleteAuthHandler);
+                scanAllHandler, updateToLatestAuthHandler, selectFromHistoryHandler, deleteAuthHandler);
     }
 
     public AuthContextMenuProvider(Supplier<List<String>> userNamesSupplier,
@@ -225,7 +231,7 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
                                     FakeIpService fakeIpService,
                                     Consumer<HttpRequest> sendToRepeaterHandler,
                                     Consumer<HttpRequest> sendToIntruderHandler,
-                                    Consumer<List<HttpRequestResponse>> bypass403ScanHandler,
+                                    Consumer<List<HttpRequestResponse>> scanAllHandler,
                                     BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> updateToLatestAuthHandler,
                                     BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> selectFromHistoryHandler,
                                     BiConsumer<ContextMenuEvent, List<HttpRequestResponse>> deleteAuthHandler) {
@@ -239,22 +245,33 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
         this.fakeIpService = fakeIpService;
         this.sendToRepeaterHandler = sendToRepeaterHandler;
         this.sendToIntruderHandler = sendToIntruderHandler;
-        this.bypass403ScanHandler = bypass403ScanHandler;
+        this.scanAllHandler = scanAllHandler;
         this.updateToLatestAuthHandler = updateToLatestAuthHandler;
         this.selectFromHistoryHandler = selectFromHistoryHandler;
         this.deleteAuthHandler = deleteAuthHandler;
     }
 
+    /** 设置 403 bypass 扫描回调（Scan 二级菜单项触发） */
+    public void setBypass403ScanHandler(Consumer<List<HttpRequestResponse>> handler) {
+        this.bypass403ScanHandler = handler != null ? handler : items -> {};
+    }
+
+    /** 设置 IDOR 扫描回调（Scan 二级菜单项触发） */
     public void setIdorScanHandler(Consumer<List<HttpRequestResponse>> handler) {
         this.idorScanHandler = handler != null ? handler : items -> {};
     }
 
+    /** 设置 JWT 扫描回调（Scan 二级菜单项触发） */
     public void setJwtScanHandler(Consumer<List<HttpRequestResponse>> handler) {
         this.jwtScanHandler = handler != null ? handler : items -> {};
     }
 
     public void setAiAnalysisHandler(Consumer<List<HttpRequestResponse>> handler) {
         this.aiAnalysisHandler = handler != null ? handler : items -> {};
+    }
+
+    public void setAiScanHandler(Consumer<List<HttpRequestResponse>> handler) {
+        this.aiScanHandler = handler != null ? handler : items -> {};
     }
 
     @Override
@@ -277,19 +294,13 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
         // === Menu 3: Fake IP ===
         menuItems.add(buildFakeIpMenu(event, finalSelectedItems));
 
-        // === Menu 4: 403 Bypass Scan ===
-        menuItems.add(buildBypass403ScanMenu(finalSelectedItems));
-
-        // === Menu 5: IDOR Scan ===
-        menuItems.add(buildIdorScanMenu(finalSelectedItems));
-
-        // === Menu 6: JWT Scan ===
-        menuItems.add(buildJwtScanMenu(finalSelectedItems));
+        // === Menu 4: Scan（二级菜单：全部扫描 / 403 / IDOR / JWT / AI 越权扫描） ===
+        menuItems.add(buildScanMenu(event, finalSelectedItems));
 
         // === Menu 7: Send to AuthKit AI ===
         menuItems.add(buildAiAnalysisMenu(finalSelectedItems));
 
-        // === Menu 7: 更新鉴权字段 ===
+        // === Menu 8: 更新鉴权字段 ===
         menuItems.add(buildUpdateAuthMenu(event, finalSelectedItems));
 
         return menuItems;
@@ -403,22 +414,33 @@ public class AuthContextMenuProvider implements ContextMenuItemsProvider {
         return menu;
     }
 
-    private Component buildBypass403ScanMenu(List<HttpRequestResponse> selectedItems) {
-        JMenuItem item = new JMenuItem(I18n.getInstance().text("auth_context_menu", "menu.bypass403.scan"));
-        item.addActionListener(e -> bypass403ScanHandler.accept(selectedItems));
-        return item;
-    }
+    /** 构建 Scan 一级菜单：收纳全部扫描项，用户可单独执行或一键全部扫描 */
+    private Component buildScanMenu(ContextMenuEvent event, List<HttpRequestResponse> selectedItems) {
+        I18n i18n = I18n.getInstance();
+        JMenu menu = new JMenu(i18n.text("auth_context_menu", "menu.scan"));
 
-    private Component buildIdorScanMenu(List<HttpRequestResponse> selectedItems) {
-        JMenuItem item = new JMenuItem(I18n.getInstance().text("auth_context_menu", "menu.idor.scan"));
-        item.addActionListener(e -> idorScanHandler.accept(selectedItems));
-        return item;
-    }
+        JMenuItem scanAll = new JMenuItem(i18n.text("auth_context_menu", "menu.scanAll"));
+        scanAll.addActionListener(e -> scanAllHandler.accept(selectedItems));
+        menu.add(scanAll);
+        menu.addSeparator();
 
-    private Component buildJwtScanMenu(List<HttpRequestResponse> selectedItems) {
-        JMenuItem item = new JMenuItem(I18n.getInstance().text("auth_context_menu", "menu.jwt.scan"));
-        item.addActionListener(e -> jwtScanHandler.accept(selectedItems));
-        return item;
+        JMenuItem bypass403 = new JMenuItem(i18n.text("auth_context_menu", "menu.bypass403.scan"));
+        bypass403.addActionListener(e -> bypass403ScanHandler.accept(selectedItems));
+        menu.add(bypass403);
+
+        JMenuItem idor = new JMenuItem(i18n.text("auth_context_menu", "menu.idor.scan"));
+        idor.addActionListener(e -> idorScanHandler.accept(selectedItems));
+        menu.add(idor);
+
+        JMenuItem jwt = new JMenuItem(i18n.text("auth_context_menu", "menu.jwt.scan"));
+        jwt.addActionListener(e -> jwtScanHandler.accept(selectedItems));
+        menu.add(jwt);
+
+        JMenuItem aiScan = new JMenuItem(i18n.text("auth_context_menu", "menu.aiScan"));
+        aiScan.addActionListener(e -> aiScanHandler.accept(selectedItems));
+        menu.add(aiScan);
+
+        return menu;
     }
 
     private Component buildAiAnalysisMenu(List<HttpRequestResponse> selectedItems) {

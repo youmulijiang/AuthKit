@@ -22,6 +22,7 @@ import view.MainPanel;
 import view.component.AuthUserConfigPanel;
 import view.component.NewUserDialog;
 import view.component.UserPanel;
+import view.dialog.AiAuthScanDialog;
 import view.dialog.Bypass403ScanDialog;
 import view.dialog.IdorScanDialog;
 import view.dialog.JwtScanDialog;
@@ -161,24 +162,39 @@ public class ContextMenuController {
         Bypass403PayloadService bypass403PayloadService = new Bypass403PayloadService();
         Bypass403ScanService bypass403ScanService =
                 new Bypass403ScanService(montoyaApi, bypass403PayloadService);
-        java.util.function.Consumer<List<HttpRequestResponse>> bypass403ScanHandler =
-                selectedItems -> runBypass403Scan(mainPanel, selectedItems, bypass403ScanService);
 
         IdorPayloadService idorPayloadService = new IdorPayloadService();
         IdorScanService idorScanService = new IdorScanService(montoyaApi, idorPayloadService);
-        java.util.function.Consumer<List<HttpRequestResponse>> idorScanHandler =
-                selectedItems -> runIdorScan(mainPanel, selectedItems, idorScanService);
 
         JwtPayloadService jwtPayloadService = new JwtPayloadService();
         JwtScanService jwtScanService = new JwtScanService(montoyaApi, jwtPayloadService);
-        java.util.function.Consumer<List<HttpRequestResponse>> jwtScanHandler =
-                selectedItems -> runJwtScan(mainPanel, selectedItems, jwtScanService);
+
+        // Scan 一级菜单回调：全部扫描（按共享配置自动执行 403 / IDOR / JWT 三个扫描项）
+        java.util.function.Consumer<List<HttpRequestResponse>> scanAllHandler =
+                selectedItems -> runScanAll(mainPanel, selectedItems,
+                        bypass403ScanService, idorScanService, jwtScanService);
 
         // AI 分析回调：切换到主界面 AI 选项卡，将数据包交给 AI 对话面板分析
         java.util.function.Consumer<List<HttpRequestResponse>> aiAnalysisHandler =
                 selectedItems -> SwingUtilities.invokeLater(() -> {
                     mainPanel.getTabbedRight().setSelectedComponent(mainPanel.getPanelAi());
                     mainPanel.getPanelAi().sendPacketsAuto(selectedItems);
+                });
+
+        // AI 越权扫描回调：弹窗内可编辑提示词并查看 AI 发送的数据包，开始后交给 AI 对话面板执行
+        core.PacketSourceService packetSourceService = new core.PacketSourceService(montoyaApi);
+        java.util.function.Consumer<List<HttpRequestResponse>> aiScanHandler =
+                selectedItems -> SwingUtilities.invokeLater(() -> {
+                    AiAuthScanDialog dialog = new AiAuthScanDialog(
+                            montoyaApi, mainPanel, packetSourceService, selectedItems);
+                    dialog.setStartHandler((packets, prompt) -> {
+                        mainPanel.getTabbedRight().setSelectedComponent(mainPanel.getPanelAi());
+                        // 注册发包监听，AI 每发一个包就回填到扫描弹窗
+                        mainPanel.getPanelAi().setToolSendListener(dialog);
+                        mainPanel.getPanelAi().startAuthScan(packets, prompt);
+                    });
+                    dialog.setCloseHandler(() -> mainPanel.getPanelAi().setToolSendListener(null));
+                    dialog.showDialog();
                 });
 
         AuthHistoryService authHistoryService = new AuthHistoryService(montoyaApi);
@@ -202,11 +218,16 @@ public class ContextMenuController {
         AuthContextMenuProvider contextMenuProvider =
                 new AuthContextMenuProvider(userNamesSupplier, enabledSupplier, enablePluginHandler,
                         sendHandler, extractHandler, createUserHandler, authHeaderKeywordsSupplier, fakeIpService,
-                        sendToRepeaterHandler, sendToIntruderHandler, bypass403ScanHandler,
+                        sendToRepeaterHandler, sendToIntruderHandler, scanAllHandler,
                         updateToLatestAuthHandler, selectFromHistoryHandler, deleteAuthHandler);
-        contextMenuProvider.setIdorScanHandler(idorScanHandler);
-        contextMenuProvider.setJwtScanHandler(jwtScanHandler);
+        contextMenuProvider.setBypass403ScanHandler(selectedItems ->
+                runBypass403Scan(mainPanel, selectedItems, bypass403ScanService));
+        contextMenuProvider.setIdorScanHandler(selectedItems ->
+                runIdorScan(mainPanel, selectedItems, idorScanService));
+        contextMenuProvider.setJwtScanHandler(selectedItems ->
+                runJwtScan(mainPanel, selectedItems, jwtScanService));
         contextMenuProvider.setAiAnalysisHandler(aiAnalysisHandler);
+        contextMenuProvider.setAiScanHandler(aiScanHandler);
         montoyaApi.userInterface().registerContextMenuItemsProvider(contextMenuProvider);
     }
 
@@ -253,6 +274,9 @@ public class ContextMenuController {
         SwingUtilities.invokeLater(refreshDataTableCallback);
     }
 
+    /**
+     * 打开 403 绕过扫描弹窗，由用户配置后点击开始（Scan 二级菜单单独触发）
+     */
     private void runBypass403Scan(JComponent parent, List<HttpRequestResponse> selectedItems,
                                   Bypass403ScanService scanService) {
         if (selectedItems == null || selectedItems.isEmpty()) {
@@ -275,6 +299,9 @@ public class ContextMenuController {
         dialog.showDialog();
     }
 
+    /**
+     * 打开 IDOR 扫描弹窗，由用户配置后点击开始（Scan 二级菜单单独触发）
+     */
     private void runIdorScan(JComponent parent, List<HttpRequestResponse> selectedItems,
                              IdorScanService scanService) {
         if (selectedItems == null || selectedItems.isEmpty()) return;
@@ -295,12 +322,16 @@ public class ContextMenuController {
         dialog.showDialog();
     }
 
+    /**
+     * 打开 JWT 扫描弹窗，由用户配置后点击开始（Scan 二级菜单单独触发）
+     */
     private void runJwtScan(JComponent parent, List<HttpRequestResponse> selectedItems,
                             JwtScanService scanService) {
         if (selectedItems == null || selectedItems.isEmpty()) return;
 
         boolean containsJwt = selectedItems.stream().anyMatch(item -> item != null
-                && item.request() != null && new JwtPayloadService().containsJwt(item.request()));
+                && item.request() != null
+                && new JwtPayloadService().containsJwt(item.request()));
         if (!containsJwt) {
             JOptionPane.showMessageDialog(parent,
                     utils.I18n.getInstance().text("auth_context_menu", "dialog.jwtScan.noToken"),
@@ -312,14 +343,101 @@ public class ContextMenuController {
         JwtScanDialog dialog = new JwtScanDialog(montoyaApi, parent);
         AtomicBoolean stopRequested = new AtomicBoolean(false);
         AtomicReference<ExecutorService> scanPoolRef = new AtomicReference<>();
+
         dialog.setCloseHandler(() -> {
             stopRequested.set(true);
             ExecutorService pool = scanPoolRef.get();
             if (pool != null) pool.shutdownNow();
         });
+
         dialog.setStartHandler((threadCount, followRedirects) -> executor.submit(() ->
                 scanService.executeScan(selectedItems, dialog, threadCount, followRedirects,
                         scanPoolRef, stopRequested)));
+        dialog.showDialog();
+    }
+
+    /**
+     * "全部扫描"：自动执行 403 / IDOR / JWT 三个扫描项，各扫描结果在独立弹窗中
+     * 并行展示。使用默认共享配置（线程数 5、不跟随重定向）。
+     * AI 越权扫描为对话式流程，不参与一键全部扫描。
+     */
+    private void runScanAll(JComponent parent, List<HttpRequestResponse> selectedItems,
+                            Bypass403ScanService bypass403ScanService,
+                            IdorScanService idorScanService,
+                            JwtScanService jwtScanService) {
+        if (selectedItems == null || selectedItems.isEmpty()) {
+            return;
+        }
+        boolean containsJwt = selectedItems.stream().anyMatch(item -> item != null
+                && item.request() != null
+                && new JwtPayloadService().containsJwt(item.request()));
+
+        SwingUtilities.invokeLater(() -> {
+            startBypass403Scan(parent, selectedItems, bypass403ScanService,
+                    DEFAULT_SCAN_THREADS, false);
+            startIdorScan(parent, selectedItems, idorScanService, DEFAULT_SCAN_THREADS);
+            if (containsJwt) {
+                startJwtScan(parent, selectedItems, jwtScanService,
+                        DEFAULT_SCAN_THREADS, false);
+            }
+        });
+    }
+
+    /** 全部扫描使用的默认线程数 */
+    private static final int DEFAULT_SCAN_THREADS = 5;
+
+    /** 启动 403 绕过扫描（按共享配置自动开始，无需用户在弹窗内再点开始） */
+    private void startBypass403Scan(JComponent parent, List<HttpRequestResponse> selectedItems,
+                                    Bypass403ScanService scanService,
+                                    int threadCount, boolean followRedirects) {
+        Bypass403ScanDialog dialog = new Bypass403ScanDialog(montoyaApi, parent);
+        AtomicBoolean stopRequested = new AtomicBoolean(false);
+        AtomicReference<ExecutorService> scanPoolRef = new AtomicReference<>();
+
+        dialog.setCloseHandler(() -> {
+            stopRequested.set(true);
+            ExecutorService pool = scanPoolRef.get();
+            if (pool != null) pool.shutdownNow();
+        });
+
+        executor.submit(() -> scanService.executeScan(selectedItems, dialog,
+                threadCount, followRedirects, scanPoolRef, stopRequested));
+        dialog.showDialog();
+    }
+
+    /** 启动 IDOR 扫描（按共享配置自动开始） */
+    private void startIdorScan(JComponent parent, List<HttpRequestResponse> selectedItems,
+                               IdorScanService scanService, int threadCount) {
+        IdorScanDialog dialog = new IdorScanDialog(montoyaApi, parent);
+        AtomicBoolean stopRequested = new AtomicBoolean(false);
+        AtomicReference<ExecutorService> scanPoolRef = new AtomicReference<>();
+
+        dialog.setCloseHandler(() -> {
+            stopRequested.set(true);
+            ExecutorService pool = scanPoolRef.get();
+            if (pool != null) pool.shutdownNow();
+        });
+
+        executor.submit(() -> scanService.executeScan(selectedItems, dialog,
+                threadCount, scanPoolRef, stopRequested));
+        dialog.showDialog();
+    }
+
+    /** 启动 JWT 扫描（按共享配置自动开始） */
+    private void startJwtScan(JComponent parent, List<HttpRequestResponse> selectedItems,
+                              JwtScanService scanService, int threadCount, boolean followRedirects) {
+        JwtScanDialog dialog = new JwtScanDialog(montoyaApi, parent);
+        AtomicBoolean stopRequested = new AtomicBoolean(false);
+        AtomicReference<ExecutorService> scanPoolRef = new AtomicReference<>();
+
+        dialog.setCloseHandler(() -> {
+            stopRequested.set(true);
+            ExecutorService pool = scanPoolRef.get();
+            if (pool != null) pool.shutdownNow();
+        });
+
+        executor.submit(() -> scanService.executeScan(selectedItems, dialog,
+                threadCount, followRedirects, scanPoolRef, stopRequested));
         dialog.showDialog();
     }
 }

@@ -1,6 +1,8 @@
 package model;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -95,6 +97,15 @@ public class CompareSampleModel {
      */
     public Set<String> getAuthNames() {
         return Set.copyOf(messageDataMap.keySet());
+    }
+
+    /**
+     * 获取所有鉴权对象名称（保持插入顺序：Original / Unauthorized / 各用户）
+     *
+     * @return 按插入顺序的鉴权对象名称列表
+     */
+    public List<String> getAuthNamesOrdered() {
+        return List.copyOf(messageDataMap.keySet());
     }
 
     /**

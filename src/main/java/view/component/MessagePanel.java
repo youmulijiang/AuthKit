@@ -40,7 +40,15 @@ public class MessagePanel extends JPanel {
     private final HttpResponseEditor combinedResponseEditor;
     private final JSplitPane splitCombined;
     private String requestText = "";
-    private String responseText = "";
+    /** 响应体文本（供 Diff 使用）；null 表示尚未解码，取用时按需解码 */
+    private String responseText;
+    /** 当前已写入编辑器的报文对象，用于跳过重复写入 */
+    private HttpRequest currentRequest;
+    private HttpResponse currentResponse;
+    /** 组合视图编辑器内容已过期（未写入），切到组合视图时再补写 */
+    private boolean combinedDirty;
+    /** 响应体是否已解码 */
+    private boolean responseDecoded = true;
 
     /**
      * 构造报文面板
@@ -63,6 +71,12 @@ public class MessagePanel extends JPanel {
         this.tabbedMessage.addTab("", requestEditor.uiComponent());
         this.tabbedMessage.addTab("", responseEditor.uiComponent());
         this.tabbedMessage.addTab("", splitCombined);
+        // 组合视图的编辑器内容延迟写入：只在真正切到该页签时补写，减少选中记录时的渲染开销
+        this.tabbedMessage.addChangeListener(e -> {
+            if (tabbedMessage.getSelectedIndex() == COMBINED_TAB_INDEX) {
+                flushCombined();
+            }
+        });
         initLayout();
         I18n.getInstance().addLanguageChangeListener(this::refreshTexts);
         refreshTexts();
@@ -99,9 +113,13 @@ public class MessagePanel extends JPanel {
         return requestText;
     }
 
-    /** 获取缓存的响应报文文本 */
+    /** 获取缓存的响应报文文本（响应体；未解码时按需解码并缓存） */
     public String getResponseText() {
-        return responseText;
+        if (!responseDecoded) {
+            responseDecoded = true;
+            responseText = currentResponse != null ? currentResponse.bodyToString() : "";
+        }
+        return responseText != null ? responseText : "";
     }
 
     /**
@@ -118,26 +136,60 @@ public class MessagePanel extends JPanel {
 
     /**
      * 设置报文内容（同时写入编辑器和缓存文本）
-     * 响应缓存仅保留响应体（bodyToString），供 Diff 比较使用，排除响应头。
+     * <p>
+     * 响应缓存仅保留响应体（bodyToString），供 Diff 比较使用，排除响应头；该解码**按需进行**
+     * （Diff 取用时才解码），避免选中记录时对所有面板解码大响应体。
+     * 同一份报文重复设置（右键、重复点击选中）时跳过编辑器写入——Montoya 编辑器重设内容
+     * 需要重新渲染，是右键/选中卡顿的主要来源。
      */
     public void setContent(HttpRequest request, HttpResponse response, String requestText, String responseText) {
         this.requestText = requestText != null ? requestText : "";
-        this.responseText = response != null ? response.bodyToString()
-                : (responseText != null ? responseText : "");
-        if (request != null) {
+        // response 非空时以响应体为准（延迟解码）；否则退回调用方给的文本
+        this.responseText = response != null ? null : (responseText != null ? responseText : "");
+        this.responseDecoded = response == null;
+
+        boolean sameRequest = request == currentRequest;
+        boolean sameResponse = response == currentResponse;
+        if (sameRequest && sameResponse && !combinedDirty) {
+            return;
+        }
+        currentRequest = request;
+        currentResponse = response;
+
+        if (!sameRequest && request != null) {
             requestEditor.setRequest(request);
-            combinedRequestEditor.setRequest(request);
         }
-        if (response != null) {
+        if (!sameResponse && response != null) {
             responseEditor.setResponse(response);
-            combinedResponseEditor.setResponse(response);
         }
+        combinedDirty = true;
+        if (tabbedMessage.getSelectedIndex() == COMBINED_TAB_INDEX) {
+            flushCombined();
+        }
+    }
+
+    /** 写入组合视图的编辑器（仅在该页签可见时调用，或切到该页签时补写） */
+    private void flushCombined() {
+        if (!combinedDirty) {
+            return;
+        }
+        if (currentRequest != null) {
+            combinedRequestEditor.setRequest(currentRequest);
+        }
+        if (currentResponse != null) {
+            combinedResponseEditor.setResponse(currentResponse);
+        }
+        combinedDirty = false;
     }
 
     /** 清空报文内容 */
     public void clearContent() {
         requestText = "";
         responseText = "";
+        responseDecoded = true;
+        currentRequest = null;
+        currentResponse = null;
+        combinedDirty = false;
         HttpRequest emptyRequest = HttpRequest.httpRequest("");
         HttpResponse emptyResponse = HttpResponse.httpResponse("");
         requestEditor.setRequest(emptyRequest);
@@ -178,15 +230,16 @@ public class MessagePanel extends JPanel {
     public String getSelectedText() {
         return switch (getSelectedView()) {
             case REQUEST -> requestText;
-            case RESPONSE -> responseText;
+            case RESPONSE -> getResponseText();
             case COMBINED -> {
+                String response = getResponseText();
                 if (requestText.isEmpty()) {
-                    yield responseText;
+                    yield response;
                 }
-                if (responseText.isEmpty()) {
+                if (response.isEmpty()) {
                     yield requestText;
                 }
-                yield requestText + "\n\n" + responseText;
+                yield requestText + "\n\n" + response;
             }
         };
     }

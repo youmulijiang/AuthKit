@@ -182,8 +182,9 @@ class AuthContextMenuProviderTest {
     }
 
     @Test
-    @DisplayName("403 Bypass Scan 菜单应触发扫描回调")
-    void bypass403Menu_shouldTriggerScanHandler() {
+    @DisplayName("Scan 一级菜单应包含全部扫描项，且全部扫描触发回调")
+    @SuppressWarnings("unchecked")
+    void scanMenu_shouldContainAllScanItems_andScanAllShouldTriggerHandler() {
         I18n i18n = I18n.getInstance();
         I18n.Language originalLanguage = i18n.getCurrentLanguage();
         i18n.setLanguage(I18n.Language.ENGLISH);
@@ -198,11 +199,22 @@ class AuthContextMenuProviderTest {
             AuthContextMenuProvider provider = new AuthContextMenuProvider(
                     List::of, () -> true, () -> {}, items -> {}, (auth, user) -> {}, auth -> null,
                     new FakeIpService(), request1 -> {}, request1 -> {}, scannedItems::addAll);
+            provider.setBypass403ScanHandler(scannedItems::addAll);
+            provider.setIdorScanHandler(scannedItems::addAll);
+            provider.setJwtScanHandler(scannedItems::addAll);
+            provider.setAiScanHandler(scannedItems::addAll);
 
-            JMenuItem bypass403Item = (JMenuItem) provider.provideMenuItems(event).get(3);
-            assertEquals("403 Bypass Scan", bypass403Item.getText());
-            bypass403Item.doClick();
+            JMenu scanMenu = (JMenu) provider.provideMenuItems(event).get(3);
+            assertEquals("Scan", scanMenu.getText());
 
+            // 二级菜单依次为：全部扫描 / 分隔符 / 403 Bypass / IDOR / JWT / AI 越权扫描
+            assertEquals("Scan All", ((JMenuItem) scanMenu.getMenuComponent(0)).getText());
+            assertEquals("403 Bypass Scan", ((JMenuItem) scanMenu.getMenuComponent(2)).getText());
+            assertEquals("IDOR Scan", ((JMenuItem) scanMenu.getMenuComponent(3)).getText());
+            assertEquals("JWT Scan", ((JMenuItem) scanMenu.getMenuComponent(4)).getText());
+            assertEquals("AI Authorization Scan", ((JMenuItem) scanMenu.getMenuComponent(5)).getText());
+
+            ((JMenuItem) scanMenu.getMenuComponent(0)).doClick();
             assertEquals(List.of(reqResp), scannedItems);
         } finally {
             i18n.setLanguage(originalLanguage);
@@ -210,34 +222,47 @@ class AuthContextMenuProviderTest {
     }
 
     @Test
-    @DisplayName("JWT Scan 菜单应触发扫描回调")
-    void jwtScanMenu_shouldTriggerScanHandler() {
+    @DisplayName("Scan 二级菜单中各扫描项应分别触发对应回调")
+    void scanMenu_eachItem_shouldTriggerItsOwnHandler() {
         I18n i18n = I18n.getInstance();
         I18n.Language originalLanguage = i18n.getCurrentLanguage();
         i18n.setLanguage(I18n.Language.ENGLISH);
         try {
+            HttpRequest request = mock(HttpRequest.class);
             HttpRequestResponse reqResp = mock(HttpRequestResponse.class);
+            when(reqResp.request()).thenReturn(request);
             MessageEditorHttpRequestResponse editorContext = mock(MessageEditorHttpRequestResponse.class);
             when(editorContext.requestResponse()).thenReturn(reqResp);
-            List<HttpRequestResponse> scanned = new ArrayList<>();
+            ContextMenuEvent event = mockContextMenuEvent(editorContext);
+            List<HttpRequestResponse> bypassItems = new ArrayList<>();
+            List<HttpRequestResponse> idorItems = new ArrayList<>();
+            List<HttpRequestResponse> jwtItems = new ArrayList<>();
             AuthContextMenuProvider provider = new AuthContextMenuProvider(
-                    List::of, () -> true, () -> {}, items -> {}, (auth, user) -> {}, auth -> null);
-            provider.setJwtScanHandler(scanned::addAll);
+                    List::of, () -> true, () -> {}, items -> {}, (auth, user) -> {}, auth -> null,
+                    new FakeIpService(), request1 -> {}, request1 -> {}, items -> {});
+            provider.setBypass403ScanHandler(bypassItems::addAll);
+            provider.setIdorScanHandler(idorItems::addAll);
+            provider.setJwtScanHandler(jwtItems::addAll);
 
-            List<Component> items = provider.provideMenuItems(mockContextMenuEvent(editorContext));
-            JMenuItem jwtItem = (JMenuItem) items.get(5);
-            assertEquals("JWT Scan", jwtItem.getText());
-            jwtItem.doClick();
+            JMenu scanMenu = (JMenu) provider.provideMenuItems(event).get(3);
 
-            assertEquals(List.of(reqResp), scanned);
+            ((JMenuItem) scanMenu.getMenuComponent(2)).doClick();
+            assertEquals(List.of(reqResp), bypassItems);
+            assertTrue(idorItems.isEmpty());
+
+            ((JMenuItem) scanMenu.getMenuComponent(3)).doClick();
+            assertEquals(List.of(reqResp), idorItems);
+
+            ((JMenuItem) scanMenu.getMenuComponent(4)).doClick();
+            assertEquals(List.of(reqResp), jwtItems);
         } finally {
             i18n.setLanguage(originalLanguage);
         }
     }
 
     @Test
-    @DisplayName("Extract Auth 菜单应同时提取内置关键字和配置面板认证头")
-    void extractMenu_shouldExtractBothBuiltInAndConfiguredAuthHeaders() {
+    @DisplayName("Extract Auth 菜单应只提取配置面板认证头（配置非空时内置关键字不参与）")
+    void extractMenu_shouldExtractOnlyConfiguredAuthHeaders() {
         I18n i18n = I18n.getInstance();
         I18n.Language originalLanguage = i18n.getCurrentLanguage();
         i18n.setLanguage(I18n.Language.ENGLISH);
@@ -264,7 +289,7 @@ class AuthContextMenuProviderTest {
             JMenu extractMenu = findMenu(provider.provideMenuItems(mockContextMenuEvent(editorContext)), "Extract Auth to User");
             ((JMenuItem) extractMenu.getMenuComponent(0)).doClick();
 
-            assertEquals(List.of("User1=Cookie: sid=abc\nX-AuthKit-Session: custom"), extracted);
+            assertEquals(List.of("User1=X-AuthKit-Session: custom"), extracted);
         } finally {
             i18n.setLanguage(originalLanguage);
         }

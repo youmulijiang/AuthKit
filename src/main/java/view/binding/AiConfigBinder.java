@@ -33,7 +33,6 @@ public final class AiConfigBinder {
         panel.getTextFieldAiBaseUrl().setText(model.getBaseUrl());
         panel.getTextFieldAiModel().setText(model.getModel());
         panel.getComboBoxAiRequestFormat().setSelectedItem(model.getRequestFormat());
-        panel.getSpinnerAiMaxPackets().setValue(model.getMaxPackets());
 
         // UI 变化 → 模型 + 持久化
         saveOnEdit(panel.getTextFieldAiApiKey(), () -> model.setApiKey(
@@ -48,10 +47,6 @@ public final class AiConfigBinder {
                 model.setRequestFormat(selected.toString());
                 model.save();
             }
-        });
-        panel.getSpinnerAiMaxPackets().addChangeListener(e -> {
-            model.setMaxPackets((Integer) panel.getSpinnerAiMaxPackets().getValue());
-            model.save();
         });
 
         // 测试连接：使用当前 UI 值即时测试
@@ -110,7 +105,6 @@ public final class AiConfigBinder {
         if (format != null) {
             model.setRequestFormat(format.toString());
         }
-        model.setMaxPackets((Integer) panel.getSpinnerAiMaxPackets().getValue());
         model.save();
     }
 }

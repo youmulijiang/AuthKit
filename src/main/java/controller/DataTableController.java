@@ -100,6 +100,21 @@ public class DataTableController {
     }
 
     /**
+     * 获取数据表当前选中的样本（无选中返回 null）
+     *
+     * @return 当前选中的 CompareSampleModel，未选中返回 null
+     */
+    public CompareSampleModel getSelectedSample() {
+        int viewRow = mainPanel.getPanelDataTable().getSelectedRow();
+        if (viewRow < 0) {
+            return null;
+        }
+        int modelRow = mainPanel.getPanelDataTable().getTableData()
+                .convertRowIndexToModel(viewRow);
+        return controller.getSample(modelRow);
+    }
+
+    /**
      * 处理 HttpHandler 捕获的请求：去重、构建原始数据、收集用户重放、刷新表格
      */
     public void handleCapturedRequest(HttpRequest request, HttpResponseReceived response) {
@@ -244,12 +259,19 @@ public class DataTableController {
                     if (e.getValueIsAdjusting()) {
                         return;
                     }
-                    updateSelectedSample(mainPanel.getPanelDataTable().getSelectedRow());
+                    // 右侧元数据 / 报文编辑器刷新放到本次事件之后执行：
+                    // 右键菜单在选中行变化时也要立即弹出，不能被编辑器重渲染拖住（右键卡顿）
+                    int modelRow = mainPanel.getPanelDataTable().getSelectedRow();
+                    SwingUtilities.invokeLater(() -> updateSelectedSample(modelRow));
                 });
 
         table.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
+                // 只处理左键点击：右键只弹菜单，不应触发选中联动与编辑器重渲染（右键卡顿）
+                if (!SwingUtilities.isLeftMouseButton(e)) {
+                    return;
+                }
                 handleTableCellClick(
                         table.rowAtPoint(e.getPoint()),
                         table.columnAtPoint(e.getPoint()));
@@ -275,6 +297,32 @@ public class DataTableController {
             public void copyUrls(List<Integer> modelRows) {
                 copySelectedUrls(modelRows);
             }
+
+            @Override
+            public void sendToAi(List<Integer> modelRows) {
+                sendSamplesToAi(modelRows);
+            }
+        });
+    }
+
+    /**
+     * 把选中行对应的报文发送到 AI 对话面板分析（切到 AI 选项卡并自动发起请求）。
+     * 每行展开为 Original / Unauthorized / 各用户报文，与数据包工具的取数口径一致。
+     *
+     * @param modelRows 选中的 model 行索引
+     */
+    private void sendSamplesToAi(List<Integer> modelRows) {
+        List<burp.api.montoya.http.message.HttpRequestResponse> packets = new java.util.ArrayList<>();
+        for (CompareSampleModel sample : collectSelectedSamples(modelRows)) {
+            packets.addAll(MainPanel.toPackets(sample));
+        }
+        if (packets.isEmpty()) {
+            showDataTableMessage("message.noSelection", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        SwingUtilities.invokeLater(() -> {
+            mainPanel.getTabbedRight().setSelectedComponent(mainPanel.getPanelAi());
+            mainPanel.getPanelAi().sendPacketsAuto(packets);
         });
     }
 

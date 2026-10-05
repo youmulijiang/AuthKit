@@ -32,6 +32,7 @@ public class DataTablePanel extends JPanel {
     private final JMenuItem itemExportCsv;
     private final JMenuItem itemExportHtml;
     private final JMenuItem itemCopyUrls;
+    private final JMenuItem itemSendToAi;
 
     /** 当前所有鉴权对象列名（有序） */
     private final List<String> authColumns;
@@ -61,6 +62,7 @@ public class DataTablePanel extends JPanel {
         this.itemExportCsv = new JMenuItem();
         this.itemExportHtml = new JMenuItem();
         this.itemCopyUrls = new JMenuItem();
+        this.itemSendToAi = new JMenuItem();
         this.rowSorter = new SmartTableRowSorter(tableModel);
         this.tableData.setRowSorter(rowSorter);
         configureSorter();
@@ -93,10 +95,13 @@ public class DataTablePanel extends JPanel {
         itemExportCsv.addActionListener(e -> triggerSelectionAction(SelectionAction.EXPORT_CSV));
         itemExportHtml.addActionListener(e -> triggerSelectionAction(SelectionAction.EXPORT_HTML));
         itemCopyUrls.addActionListener(e -> triggerSelectionAction(SelectionAction.COPY_URLS));
+        itemSendToAi.addActionListener(e -> triggerSelectionAction(SelectionAction.SEND_TO_AI));
         selectionPopupMenu.add(itemExportCsv);
         selectionPopupMenu.add(itemExportHtml);
         selectionPopupMenu.addSeparator();
         selectionPopupMenu.add(itemCopyUrls);
+        selectionPopupMenu.addSeparator();
+        selectionPopupMenu.add(itemSendToAi);
 
         tableData.addMouseListener(new MouseAdapter() {
             @Override
@@ -130,6 +135,7 @@ public class DataTablePanel extends JPanel {
         itemExportCsv.setText(i18n.text("data_table", "menu.exportCsv"));
         itemExportHtml.setText(i18n.text("data_table", "menu.exportHtml"));
         itemCopyUrls.setText(i18n.text("data_table", "menu.copyUrls"));
+        itemSendToAi.setText(i18n.text("data_table", "menu.sendToAi"));
     }
 
     private void triggerSelectionAction(SelectionAction action) {
@@ -144,6 +150,7 @@ public class DataTablePanel extends JPanel {
             case EXPORT_CSV -> selectionActionHandler.exportCsv(modelRows);
             case EXPORT_HTML -> selectionActionHandler.exportHtml(modelRows);
             case COPY_URLS -> selectionActionHandler.copyUrls(modelRows);
+            case SEND_TO_AI -> selectionActionHandler.sendToAi(modelRows);
         }
     }
 
@@ -513,7 +520,8 @@ public class DataTablePanel extends JPanel {
     private enum SelectionAction {
         EXPORT_CSV,
         EXPORT_HTML,
-        COPY_URLS
+        COPY_URLS,
+        SEND_TO_AI
     }
 
     public interface SelectionActionHandler {
@@ -522,6 +530,9 @@ public class DataTablePanel extends JPanel {
         void exportHtml(List<Integer> modelRows);
 
         void copyUrls(List<Integer> modelRows);
+
+        /** 将选中行对应的报文发送到 AI 对话面板分析 */
+        void sendToAi(List<Integer> modelRows);
     }
 
     /**
