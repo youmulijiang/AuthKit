@@ -1,6 +1,6 @@
-# AuthKit — Burp Suite 越权检测与 AI 鉴权分析插件
+# AuthKit — 首个多维度辅助检查鉴权安全的burpsuite插件
 
-AuthKit 通过多身份重放与响应对比，辅助发现**未授权访问、水平越权、垂直越权及 BOLA / IDOR 风险**，减少重复发包和手工比对。
+AuthKit 通过多身份重放与多维度响应对比，辅助发现**未授权访问、水平越权、垂直越权及 BOLA / IDOR 风险**，减少重复发包和手工比对。
 ![AuthKit Burp Suite 越权检测插件功能概览](img/Authkit.png)
 > AuthKit 2.0：品质升级，优化响应归一化与越权评分算法，增强 AI 辅助分析，提升检测效率与使用体验。
 
