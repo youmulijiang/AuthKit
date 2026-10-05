@@ -474,10 +474,10 @@ public class ConfigurationPanel extends JPanel {
         return comboBoxLanguage;
     }
 
-    /** 获取当前选中的展示指标 */
+    /** 获取当前选中的展示指标，初始化或无选中项时默认使用 Rank。 */
     public String getSelectedDisplayMetric() {
         MetricOption option = (MetricOption) comboBoxDisplayMetric.getSelectedItem();
-        return option != null ? option.key : METRIC_LENGTH;
+        return option != null ? option.key : METRIC_RANK;
     }
 
     /** 获取域名过滤开关 */
