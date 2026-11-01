@@ -216,6 +216,8 @@ public class AiChatPanel extends JPanel {
     private volatile Thread chatThread;
     /** 用户是否已请求暂停本轮生成 */
     private volatile boolean cancelRequested = false;
+    /** 对话轮次编号：每轮开始/结束递增，用于识别暂停后残留的异步卡片回调（批准卡/询问卡/选包弹窗） */
+    private volatile int chatRunId = 0;
     /** 当前显示的 thinking 占位组件（非 null 表示正在思考） */
     private JComponent thinkingIndicator;
     /** 滚动到底部动画计时器 */
@@ -379,7 +381,9 @@ public class AiChatPanel extends JPanel {
         }
         textAreaInput.setText("");
         ensureSystemPrompt();
-        history.add(AiChatService.ChatMessage.user(input));
+        synchronized (history) {
+            history.add(AiChatService.ChatMessage.user(input));
+        }
         appendUserBubble(input, input);
         dispatchChatRequest();
     }
@@ -422,19 +426,21 @@ public class AiChatPanel extends JPanel {
 
     /** 保证 system 提示词存在且位于首位（按可用工具附加使用说明） */
     private void ensureSystemPrompt() {
-        if (history.isEmpty() || !"system".equals(history.get(0).role())) {
-            StringBuilder prompt = new StringBuilder(SYSTEM_PROMPT);
-            prompt.append(ASK_TOOL_PROMPT);
-            if (contextPacketsSupplier != null) {
-                prompt.append(PACKETS_TOOL_PROMPT);
+        synchronized (history) {
+            if (history.isEmpty() || !"system".equals(history.get(0).role())) {
+                StringBuilder prompt = new StringBuilder(SYSTEM_PROMPT);
+                prompt.append(ASK_TOOL_PROMPT);
+                if (contextPacketsSupplier != null) {
+                    prompt.append(PACKETS_TOOL_PROMPT);
+                }
+                if (packetSourceService != null) {
+                    prompt.append(PACKET_SOURCE_TOOL_PROMPT);
+                }
+                if (isSendToolEnabled()) {
+                    prompt.append(SEND_TOOL_PROMPT);
+                }
+                history.add(0, AiChatService.ChatMessage.system(prompt.toString()));
             }
-            if (packetSourceService != null) {
-                prompt.append(PACKET_SOURCE_TOOL_PROMPT);
-            }
-            if (isSendToolEnabled()) {
-                prompt.append(SEND_TOOL_PROMPT);
-            }
-            history.add(0, AiChatService.ChatMessage.system(prompt.toString()));
         }
     }
 
@@ -446,9 +452,13 @@ public class AiChatPanel extends JPanel {
     /** 后台线程调用 LLM，先插入 thinking 占位，回复到达后替换为气泡 */
     private void dispatchChatRequest() {
         cancelRequested = false;
+        chatRunId++;
         setAwaiting(true);
         insertThinkingIndicator();
-        List<AiChatService.ChatMessage> snapshot = new ArrayList<>(history);
+        List<AiChatService.ChatMessage> snapshot;
+        synchronized (history) {
+            snapshot = new ArrayList<>(history);
+        }
         Thread thread = new Thread(() -> runChatLoop(snapshot), "authkit-ai-chat");
         thread.setDaemon(true);
         chatThread = thread;
@@ -471,7 +481,7 @@ public class AiChatPanel extends JPanel {
         finishCancelled();
     }
 
-    /** 本轮已暂停：恢复界面并（首次调用时）记录暂停提示气泡 */
+    /** 本轮已暂停：恢复界面、作废残留的未决批准卡片并（首次调用时）记录暂停提示气泡 */
     private void finishCancelled() {
         if (!SwingUtilities.isEventDispatchThread()) {
             SwingUtilities.invokeLater(this::finishCancelled);
@@ -480,12 +490,23 @@ public class AiChatPanel extends JPanel {
         boolean wasAwaiting = awaitingReply;
         removeThinkingIndicator();
         setAwaiting(false);
+        // 使本轮尚未插入/未决定的异步卡片回调失效，并把未决批准卡片原位改为"已拒绝"回执：
+        // 否则用户事后点击残留卡片的"会话内允许"会意外放行后续对话的自动发包
+        chatRunId++;
+        if (pendingApprovalCard != null) {
+            pendingApprovalCard.resolve(ToolApprovalCard.Decision.DENY);
+            pendingApprovalCard = null;
+        }
+        pendingApprovalContinuation = null;
         if (wasAwaiting) {
             addBubble(createBubblePane(
                     escapeHtml(I18n.getInstance().text("ai", "chat.paused")),
                     new Color(0xF5, 0xF5, 0xF5)), false);
         }
     }
+
+    /** 轮数超限后允许的最大提醒次数，防止不听话的模型导致 API 无限调用 */
+    private static final int MAX_OVER_LIMIT_NUDGES = 2;
 
     /**
      * 对话主循环（后台线程）：请求模型 → 若回复含工具调用标记，按工具类型处理
@@ -497,6 +518,8 @@ public class AiChatPanel extends JPanel {
      */
     private void runChatLoop(List<AiChatService.ChatMessage> snapshot) {
         int toolRounds = 0;
+        // 轮数超限后的提醒次数上限：超过后强制按最终回答收尾
+        int overLimitNudges = 0;
         List<AiChatService.ChatMessage> current = snapshot;
         while (true) {
             if (cancelRequested) {
@@ -528,23 +551,44 @@ public class AiChatPanel extends JPanel {
             AiToolService.ToolCall call = resolveToolCall(reply.content());
             boolean overLimit = toolRounds >= MAX_TOOL_ROUNDS;
             if (call.type() != AiToolService.ToolType.NONE && overLimit) {
-                // 达到轮数上限仍想调用工具：不执行，直接要求模型给结论
+                // 达到轮数上限仍想调用工具：不执行，要求模型给结论；
+                // 多次提醒后仍坚持则强制按最终回答收尾，避免无限循环调用 API
                 toolRounds++;
-                history.add(AiChatService.ChatMessage.assistant(reply.content()));
-                history.add(AiChatService.ChatMessage.user(
-                        "[tool] Max tool rounds (" + MAX_TOOL_ROUNDS
-                                + ") reached. Stop calling tools and give your final conclusion now."));
+                if (overLimitNudges >= MAX_OVER_LIMIT_NUDGES) {
+                    String reasoning = reply.reasoning();
+                    String content = reply.content();
+                    synchronized (history) {
+                        history.add(AiChatService.ChatMessage.assistant(content));
+                    }
+                    SwingUtilities.invokeLater(() -> {
+                        removeThinkingIndicator();
+                        appendAssistantBubble(reasoning, content);
+                        setAwaiting(false);
+                    });
+                    return;
+                }
+                overLimitNudges++;
+                synchronized (history) {
+                    history.add(AiChatService.ChatMessage.assistant(reply.content()));
+                    history.add(AiChatService.ChatMessage.user(
+                            "[tool] Max tool rounds (" + MAX_TOOL_ROUNDS
+                                    + ") reached. Stop calling tools and give your final conclusion now."));
+                }
                 final String label = toolCallLabel(call);
                 SwingUtilities.invokeLater(() ->
                         appendToolHistoryBubble(label, null));
-                current = new ArrayList<>(history);
+                synchronized (history) {
+                    current = new ArrayList<>(history);
+                }
                 continue;
             }
             if (call.type() == AiToolService.ToolType.NONE) {
                 // 最终回答：落历史、替换 thinking 为正式气泡
                 String reasoning = reply.reasoning();
                 String content = reply.content();
-                history.add(AiChatService.ChatMessage.assistant(content));
+                synchronized (history) {
+                    history.add(AiChatService.ChatMessage.assistant(content));
+                }
                 SwingUtilities.invokeLater(() -> {
                     removeThinkingIndicator();
                     appendAssistantBubble(reasoning, content);
@@ -553,17 +597,21 @@ public class AiChatPanel extends JPanel {
                 return;
             }
             toolRounds++;
-            history.add(AiChatService.ChatMessage.assistant(reply.content()));
+            synchronized (history) {
+                history.add(AiChatService.ChatMessage.assistant(reply.content()));
+            }
             if (call.type() == AiToolService.ToolType.GET_PACKETS) {
                 // 数据包工具：只读数据表选中记录，不发送流量，无需用户批准
                 List<HttpRequestResponse> packets = fetchSelectedPackets();
                 final String feedback = buildPacketsFeedback(packets);
-                history.add(AiChatService.ChatMessage.user(feedback));
+                synchronized (history) {
+                    history.add(AiChatService.ChatMessage.user(feedback));
+                    current = new ArrayList<>(history);
+                }
                 if (!packets.isEmpty()) {
                     SwingUtilities.invokeLater(() ->
                             appendUserBubble(summarizePackets(packets), feedback));
                 }
-                current = new ArrayList<>(history);
                 continue;
             }
             if (call.type() == AiToolService.ToolType.PROXY_HISTORY
@@ -574,26 +622,30 @@ public class AiChatPanel extends JPanel {
                         ? core.PacketSourceService.Source.PROXY_HISTORY
                         : core.PacketSourceService.Source.SITEMAP;
                 PacketSelection selection = selectPacketsOnEdt(source, call.payload());
-                if (selection.redescribe()) {
-                    history.add(AiChatService.ChatMessage.user(PACKET_REDESCRIBE_FEEDBACK));
-                    SwingUtilities.invokeLater(this::focusInput);
-                } else if (selection.packets() == null || selection.packets().isEmpty()) {
-                    history.add(AiChatService.ChatMessage.user(PACKET_ACCESS_DENIED_FEEDBACK));
-                } else {
-                    final String feedback = buildPacketSourceFeedback(source, selection.packets());
-                    history.add(AiChatService.ChatMessage.user(feedback));
-                    SwingUtilities.invokeLater(() ->
-                            appendUserBubble(summarizePackets(selection.packets()), feedback));
+                synchronized (history) {
+                    if (selection.redescribe()) {
+                        history.add(AiChatService.ChatMessage.user(PACKET_REDESCRIBE_FEEDBACK));
+                        SwingUtilities.invokeLater(this::focusInput);
+                    } else if (selection.packets() == null || selection.packets().isEmpty()) {
+                        history.add(AiChatService.ChatMessage.user(PACKET_ACCESS_DENIED_FEEDBACK));
+                    } else {
+                        final String feedback = buildPacketSourceFeedback(source, selection.packets());
+                        history.add(AiChatService.ChatMessage.user(feedback));
+                        SwingUtilities.invokeLater(() ->
+                                appendUserBubble(summarizePackets(selection.packets()), feedback));
+                    }
+                    current = new ArrayList<>(history);
                 }
-                current = new ArrayList<>(history);
                 continue;
             }
             if (call.type() == AiToolService.ToolType.ASK_USER) {
                 // 询问工具：AI 不清楚意图时发问，用户在卡片里选选项 / 自定义回答 / 取消
                 AiToolService.AskRequest ask = AiToolService.parseAskRequest(call.payload());
                 AskUserCard.Answer answer = awaitUserAnswerOnEdt(ask.question(), ask.options());
-                history.add(AiChatService.ChatMessage.user(buildAskFeedback(answer)));
-                current = new ArrayList<>(history);
+                synchronized (history) {
+                    history.add(AiChatService.ChatMessage.user(buildAskFeedback(answer)));
+                    current = new ArrayList<>(history);
+                }
                 continue;
             }
             // 发包工具：经批准卡片等待用户决定（会话内允许后免批准）
@@ -609,8 +661,11 @@ public class AiChatPanel extends JPanel {
                     utils.LogUtils.INSTANCE.error("AI tool request failed", ex);
                     toolResult = "[tool] Request failed: " + ex.getMessage();
                 }
-                history.add(AiChatService.ChatMessage.user(
-                        "[tool] HTTP Response for the request you sent:\n" + toolResult));
+                synchronized (history) {
+                    history.add(AiChatService.ChatMessage.user(
+                            "[tool] HTTP Response for the request you sent:\n" + toolResult));
+                    current = new ArrayList<>(history);
+                }
                 final String result = toolResult;
                 SwingUtilities.invokeLater(() -> {
                     if (pendingApprovalCard != null) {
@@ -620,9 +675,11 @@ public class AiChatPanel extends JPanel {
                 notifyRequestSent(sentPacket, toolRounds);
             } else {
                 // 拒绝：中性反馈，不给模型任何可继续尝试的措辞
-                history.add(AiChatService.ChatMessage.user(TOOL_DENIAL_FEEDBACK));
+                synchronized (history) {
+                    history.add(AiChatService.ChatMessage.user(TOOL_DENIAL_FEEDBACK));
+                    current = new ArrayList<>(history);
+                }
             }
-            current = new ArrayList<>(history);
         }
     }
 
@@ -697,8 +754,17 @@ public class AiChatPanel extends JPanel {
         final java.util.concurrent.atomic.AtomicReference<PacketSelection> holder =
                 new java.util.concurrent.atomic.AtomicReference<>(PacketSelection.none());
         final String keyword = hint;
+        final int myRun = chatRunId;
         SwingUtilities.invokeLater(() -> {
             removeThinkingIndicator();
+            if (chatRunId != myRun || !awaitingReply) {
+                // 本轮已暂停/结束：不再弹出让用户白选，直接按"未提供数据"唤醒等待方
+                holder.set(PacketSelection.none());
+                synchronized (lock) {
+                    lock.notifyAll();
+                }
+                return;
+            }
             view.dialog.PacketSelectDialog dialog = new view.dialog.PacketSelectDialog(
                     this, packetSourceService, source, keyword, keyword);
             List<HttpRequestResponse> picked = dialog.showDialog();
@@ -732,6 +798,7 @@ public class AiChatPanel extends JPanel {
         final Object lock = new Object();
         final java.util.concurrent.atomic.AtomicReference<AskUserCard.Answer> holder =
                 new java.util.concurrent.atomic.AtomicReference<>(AskUserCard.Answer.cancel());
+        final int myRun = chatRunId;
         SwingUtilities.invokeLater(() -> {
             removeThinkingIndicator();
             AskUserCard card = new AskUserCard(question, options, answer -> {
@@ -739,7 +806,10 @@ public class AiChatPanel extends JPanel {
                     holder.set(answer);
                     lock.notifyAll();
                 }
-                insertThinkingIndicator();
+                // 本轮已暂停/结束时不再补插 thinking 占位，避免残留一个永不消失的"思考中"气泡
+                if (chatRunId == myRun && awaitingReply) {
+                    insertThinkingIndicator();
+                }
             });
             insertAskCard(card);
         });
@@ -819,9 +889,10 @@ public class AiChatPanel extends JPanel {
     private boolean awaitApprovalOnEdt(String requestText) {
         final Object lock = new Object();
         final boolean[] decision = {false};
+        final int myRun = chatRunId;
         SwingUtilities.invokeLater(() -> {
             removeThinkingIndicator();
-            pendingApprovalCard = insertApprovalCard(requestText, dec -> {
+            java.util.function.Consumer<ToolApprovalCard.Decision> onDecision = dec -> {
                 synchronized (lock) {
                     decision[0] = dec != ToolApprovalCard.Decision.DENY;
                     toolSessionApproved = dec == ToolApprovalCard.Decision.APPROVE_SESSION;
@@ -833,7 +904,16 @@ public class AiChatPanel extends JPanel {
                 if (decision[0]) {
                     insertThinkingIndicator();
                 }
-            });
+            };
+            ToolApprovalCard card = new ToolApprovalCard(requestText, onDecision);
+            if (chatRunId != myRun || !awaitingReply) {
+                // 本轮已暂停/结束：卡片仅作为记录展示，立即变为拒绝回执（不可再交互），
+                // 防止用户事后点击"会话内允许"意外放行后续对话的自动发包
+                card.resolve(ToolApprovalCard.Decision.DENY);
+                insertApprovalCard(card);
+                return;
+            }
+            pendingApprovalCard = insertApprovalCard(card);
         });
         synchronized (lock) {
             try {
@@ -851,7 +931,9 @@ public class AiChatPanel extends JPanel {
         if (awaitingReply) {
             return;
         }
-        history.clear();
+        synchronized (history) {
+            history.clear();
+        }
         assistantAnswers.clear();
         toolSessionApproved = false;
         removeApprovalCard();
@@ -860,7 +942,11 @@ public class AiChatPanel extends JPanel {
 
     /** 保存会话到用户选择的 JSON 文件 */
     private void doSaveSession() {
-        if (history.stream().noneMatch(msg -> !"system".equals(msg.role()))) {
+        List<AiChatService.ChatMessage> snapshot;
+        synchronized (history) {
+            snapshot = new ArrayList<>(history);
+        }
+        if (snapshot.stream().noneMatch(msg -> !"system".equals(msg.role()))) {
             JOptionPane.showMessageDialog(this,
                     I18n.getInstance().text("ai", "message.sessionEmpty"),
                     I18n.getInstance().text("ai", "message.sessionSaved"),
@@ -875,7 +961,7 @@ public class AiChatPanel extends JPanel {
         }
         Path path = ensureJsonExtension(chooser.getSelectedFile());
         try {
-            sessionService.save(history, path);
+            sessionService.save(snapshot, path);
             JOptionPane.showMessageDialog(this,
                     I18n.getInstance().format("ai", "message.sessionSaved", path),
                     I18n.getInstance().text("ai", "dialog.saveSession.title"),
@@ -902,12 +988,14 @@ public class AiChatPanel extends JPanel {
         Path path = chooser.getSelectedFile().toPath();
         try {
             List<AiChatService.ChatMessage> messages = sessionService.load(path);
-            history.clear();
+            synchronized (history) {
+                history.clear();
+                ensureSystemPrompt();
+                history.addAll(messages);
+            }
             assistantAnswers.clear();
             toolSessionApproved = false;
             removeApprovalCard();
-            ensureSystemPrompt();
-            history.addAll(messages);
             rebuildBubblesFromHistory();
             JOptionPane.showMessageDialog(this,
                     I18n.getInstance().format("ai", "message.sessionLoaded",
@@ -943,7 +1031,9 @@ public class AiChatPanel extends JPanel {
         }
         String packetText = buildPacketPrompt(packets);
         ensureSystemPrompt();
-        history.add(AiChatService.ChatMessage.user(packetText));
+        synchronized (history) {
+            history.add(AiChatService.ChatMessage.user(packetText));
+        }
         // 聊天窗口中用户侧显示摘要（复制按钮复制完整上下文），避免整包刷屏
         appendUserBubble(summarizePackets(packets), packetText);
         dispatchChatRequest();
@@ -965,7 +1055,9 @@ public class AiChatPanel extends JPanel {
                 ? I18n.getInstance().text("ai", "prompt.authScan") : prompt.trim();
         String packetText = buildPacketPrompt(packets);
         ensureSystemPrompt();
-        history.add(AiChatService.ChatMessage.user(packetText + "\n\n" + scanPrompt));
+        synchronized (history) {
+            history.add(AiChatService.ChatMessage.user(packetText + "\n\n" + scanPrompt));
+        }
         appendUserBubble(summarizePackets(packets) + "\n" + scanPrompt,
                 packetText + "\n\n" + scanPrompt);
         dispatchChatRequest();
@@ -1140,7 +1232,7 @@ public class AiChatPanel extends JPanel {
             String code = m.group(1).replaceAll("\\n\\s*$", "").replace("\n", "<br>");
             codeBlocks.add("<font face='monospaced'><span style='background:#EEEEEE;'>"
                     + code + "</span></font>");
-            m.appendReplacement(sb, Matcher.quoteReplacement(" CB" + (codeBlocks.size() - 1) + " "));
+            m.appendReplacement(sb, Matcher.quoteReplacement("\u0000CB" + (codeBlocks.size() - 1) + "\u0000"));
         }
         m.appendTail(sb);
         html = sb.toString();
@@ -1172,7 +1264,7 @@ public class AiChatPanel extends JPanel {
         html = html.replace("\n\n", "<br><br>").replace("\n", "<br>");
         // 还原代码块占位符
         for (int i = 0; i < codeBlocks.size(); i++) {
-            html = html.replace(" CB" + i + " ", codeBlocks.get(i));
+            html = html.replace("\u0000CB" + i + "\u0000", codeBlocks.get(i));
         }
         return html;
     }
@@ -1668,8 +1760,17 @@ public class AiChatPanel extends JPanel {
      * @return 插入的卡片（EDT 外调用时经 invokeLater 排队，返回值仍有效）
      */
     private ToolApprovalCard insertApprovalCard(String requestText,
-                                                Consumer<ToolApprovalCard.Decision> onDecided) {
-        ToolApprovalCard card = new ToolApprovalCard(requestText, onDecided);
+                                                Consumer<ToolApprovalCard.Decision> onDecision) {
+        return insertApprovalCard(new ToolApprovalCard(requestText, onDecision));
+    }
+
+    /**
+     * 将批准卡片加入对话流（允许调用方先调整卡片状态再插入，如暂停后的记录化卡片）。
+     *
+     * @param card 预构建的批准卡片
+     * @return 传入的卡片实例
+     */
+    private ToolApprovalCard insertApprovalCard(ToolApprovalCard card) {
         JPanel aligner = createAligner(FlowLayout.LEFT);
         aligner.putClientProperty(KEY_APPROVAL_CARD, card);
         // 同时登记为测量目标，视口变化时 relayoutBubbles 按类型分派重排
@@ -1764,7 +1865,11 @@ public class AiChatPanel extends JPanel {
     private void rebuildBubblesFromHistory() {
         clearBubbles();
         String packetHeader = I18n.getInstance().text("ai", "prompt.packetHeader");
-        for (AiChatService.ChatMessage msg : history) {
+        List<AiChatService.ChatMessage> snapshot;
+        synchronized (history) {
+            snapshot = new ArrayList<>(history);
+        }
+        for (AiChatService.ChatMessage msg : snapshot) {
             switch (msg.role()) {
                 case "user" -> {
                     if (msg.content().startsWith(packetHeader)) {
