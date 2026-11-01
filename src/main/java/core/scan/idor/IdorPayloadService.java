@@ -472,9 +472,13 @@ public class IdorPayloadService {
 
     private void addVersionSegmentMutations(String segment, LinkedHashSet<String> mutations) {
         if (!isVersionSegment(segment)) return;
-        long version = Long.parseLong(segment.substring(1));
-        if (version < Long.MAX_VALUE) mutations.add("v" + (version + 1));
-        if (version > 0) mutations.add("v" + (version - 1));
+        try {
+            long version = Long.parseLong(segment.substring(1));
+            if (version < Long.MAX_VALUE) mutations.add("v" + (version + 1));
+            if (version > 0) mutations.add("v" + (version - 1));
+        } catch (NumberFormatException ignored) {
+            // 版本号超出 long 范围：跳过数值变形，仅保留固定候选，避免异常中断整场扫描
+        }
         mutations.add("v1");
         mutations.add("v2");
     }

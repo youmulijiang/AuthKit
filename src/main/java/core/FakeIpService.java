@@ -19,13 +19,17 @@ public class FakeIpService {
     public static final String BRUTE_FORCE_MARKER_HEADER = "X-AK-Fake-IP";
     public static final String BRUTE_FORCE_MARKER_VALUE = "1";
 
+    /**
+     * 常见可伪造客户端 IP 的请求头。
+     * 注意：仅收录取值为 IP 的头——X-Forwarded-Proto / X-Forwarded-Host / X-Requested-With /
+     * X-Api-Version 等协议语义头不在此列，注入 IP 值会破坏语义并容易被网关直接拒绝。
+     */
     private static final List<String> FAKE_IP_HEADERS = List.of(
             "X-Forwarded-For", "X-Forwarded", "Forwarded-For", "Forwarded",
-            "X-Requested-With", "X-Forwarded-Proto", "X-Forwarded-Host",
             "X-remote-IP", "X-remote-addr", "True-Client-IP", "X-Client-IP", "Client-IP", "X-Real-IP",
             "Ali-CDN-Real-IP", "Cdn-Src-Ip", "Cdn-Real-Ip", "CF-Connecting-IP", "X-Cluster-Client-IP",
             "WL-Proxy-Client-IP", "Proxy-Client-IP", "Fastly-Client-Ip", "True-Client-Ip", "X-Originating-IP",
-            "X-Host", "X-Custom-IP-Authorization", "X-Api-Version"
+            "X-Host", "X-Custom-IP-Authorization"
     );
 
     private static final int[][] PUBLIC_IP_RANGES = {
@@ -111,7 +115,7 @@ public class FakeIpService {
 
     public String randomPublicIp() {
         int[] range = PUBLIC_IP_RANGES[random.nextInt(PUBLIC_IP_RANGES.length)];
-        int value = range[0] + random.nextInt(range[1] - range[0]);
+        int value = range[0] + random.nextInt(range[1] - range[0] + 1);
         return intToIpv4(value);
     }
 

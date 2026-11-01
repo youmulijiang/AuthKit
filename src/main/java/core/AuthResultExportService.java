@@ -129,8 +129,15 @@ public class AuthResultExportService {
         csv.append("\r\n");
     }
 
+    /** 可能被 Excel/WPS 当作公式执行的危险起始字符 */
+    private static final String CSV_FORMULA_PREFIXES = "=+-@\t\r";
+
     private String escapeCsv(String value) {
         String safeValue = safe(value);
+        // 防公式注入：来自服务器响应的值（如 Content-Type、Note）以公式起始字符开头时加前缀中性化
+        if (!safeValue.isEmpty() && CSV_FORMULA_PREFIXES.indexOf(safeValue.charAt(0)) >= 0) {
+            safeValue = "'" + safeValue;
+        }
         if (safeValue.contains(",") || safeValue.contains("\n") || safeValue.contains("\r") || safeValue.contains("\"")) {
             return "\"" + safeValue.replace("\"", "\"\"") + "\"";
         }

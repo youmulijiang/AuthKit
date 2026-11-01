@@ -46,7 +46,9 @@ public class AiSessionService {
     }
 
     /**
-     * 从 JSON 文件恢复对话历史（不含 system 提示词，由调用方注入）
+     * 从 JSON 文件恢复对话历史（不含 system 提示词，由调用方注入）。
+     * 每条消息的字段搜索以"role"键出现位置为界分段，避免某条消息缺失 content 时
+     * 跨边界读到下一条消息的内容；system 角色消息直接跳过（恢复时由面板重新注入）。
      *
      * @param path 会话文件路径
      * @return 按时间顺序的 user / assistant 消息列表
@@ -64,20 +66,31 @@ public class AiSessionService {
             throw new IOException("Invalid session file: malformed messages array");
         }
         String array = json.substring(arrayStart + 1, arrayEnd);
-        int cursor = 0;
-        while (true) {
-            int roleIdx = array.indexOf("\"role\"", cursor);
-            if (roleIdx < 0) {
-                break;
-            }
-            String role = AiChatService.extractStringField(array.substring(roleIdx), "role");
+
+        // 收集所有 "role" 键位置，相邻两个键之间即一条消息的字段范围
+        List<Integer> roleIndices = new ArrayList<>();
+        int idx = array.indexOf("\"role\"");
+        while (idx >= 0) {
+            roleIndices.add(idx);
+            idx = array.indexOf("\"role\"", idx + 1);
+        }
+        if (roleIndices.isEmpty()) {
+            return messages;
+        }
+
+        for (int i = 0; i < roleIndices.size(); i++) {
+            int start = roleIndices.get(i);
+            int end = i + 1 < roleIndices.size() ? roleIndices.get(i + 1) : array.length();
+            String segment = array.substring(start, end);
+            String role = AiChatService.extractStringField(segment, "role");
             if (role == null || role.isBlank()) {
                 throw new IOException("Invalid session file: message without role");
             }
-            String content = AiChatService.extractStringField(array.substring(roleIdx), "content");
+            if ("system".equals(role)) {
+                continue;
+            }
+            String content = AiChatService.extractStringField(segment, "content");
             messages.add(new AiChatService.ChatMessage(role, content != null ? content : ""));
-            int contentIdx = array.indexOf("\"content\"", roleIdx);
-            cursor = (contentIdx >= 0 ? contentIdx : roleIdx) + 1;
         }
         return messages;
     }
