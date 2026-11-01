@@ -15,6 +15,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
+import java.security.MessageDigest;
 import java.security.interfaces.*;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
@@ -317,7 +318,7 @@ public class JwtPanel extends JPanel {
         } catch (JWTDecodeException ex) {
             JOptionPane.showMessageDialog(this,
                     I18n.getInstance().format("jwt", "message.decodeFailed", ex.getMessage()),
-                    "Error", JOptionPane.ERROR_MESSAGE);
+                    I18n.getInstance().text("jwt", "dialog.error"), JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -347,7 +348,7 @@ public class JwtPanel extends JPanel {
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this,
                     I18n.getInstance().format("jwt", "message.encodeFailed", ex.getMessage()),
-                    "Error", JOptionPane.ERROR_MESSAGE);
+                    I18n.getInstance().text("jwt", "dialog.error"), JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -364,11 +365,11 @@ public class JwtPanel extends JPanel {
             verifier.verify(jwt);
             JOptionPane.showMessageDialog(this,
                     I18n.getInstance().text("jwt", "message.verifySuccess"),
-                    "Success", JOptionPane.INFORMATION_MESSAGE);
+                    I18n.getInstance().text("jwt", "dialog.success"), JOptionPane.INFORMATION_MESSAGE);
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this,
                     I18n.getInstance().format("jwt", "message.verifyFailed", ex.getMessage()),
-                    "Failed", JOptionPane.WARNING_MESSAGE);
+                    I18n.getInstance().text("jwt", "dialog.failed"), JOptionPane.WARNING_MESSAGE);
         }
     }
 
@@ -384,11 +385,12 @@ public class JwtPanel extends JPanel {
 
     /** 开始爆破 */
     private void doStartBrute() {
+        I18n i18n = I18n.getInstance();
         String selectedAlgName = (String) comboAlgorithm.getSelectedItem();
         if (!isHmacAlgorithm(selectedAlgName)) {
             JOptionPane.showMessageDialog(this,
-                    "Brute force is only supported for HMAC algorithms (HS256/HS384/HS512)",
-                    "Unsupported", JOptionPane.WARNING_MESSAGE);
+                    i18n.text("jwt", "message.bruteUnsupported"),
+                    i18n.text("jwt", "dialog.unsupported"), JOptionPane.WARNING_MESSAGE);
             return;
         }
         String jwt = textAreaJwt.getText().trim();
@@ -398,7 +400,9 @@ public class JwtPanel extends JPanel {
         }
         File dictFile = new File(dictPath);
         if (!dictFile.exists() || !dictFile.isFile()) {
-            JOptionPane.showMessageDialog(this, "Dictionary file not found", "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this,
+                    i18n.text("jwt", "message.dictNotFound"),
+                    i18n.text("jwt", "dialog.error"), JOptionPane.ERROR_MESSAGE);
             return;
         }
 
@@ -420,6 +424,7 @@ public class JwtPanel extends JPanel {
                 }
 
                 long current = 0;
+                int lastPct = -1;
                 String selectedAlg = (String) comboAlgorithm.getSelectedItem();
                 String encodingType = (String) comboEncodingType.getSelectedItem();
 
@@ -432,34 +437,41 @@ public class JwtPanel extends JPanel {
                             continue;
                         }
                         try {
-                            Algorithm alg = resolveAlgorithm(selectedAlg, candidateSecret);
-                            JWT.require(alg).build().verify(jwt);
-                            // 找到密钥
-                            final String found = candidateSecret;
-                            SwingUtilities.invokeLater(() -> {
-                                textFieldSecret.setText(found);
-                                progressBar.setValue(100);
-                                JOptionPane.showMessageDialog(this,
-                                        I18n.getInstance().format("jwt", "message.bruteFound", found),
-                                        "Found", JOptionPane.INFORMATION_MESSAGE);
-                            });
-                            return;
+                            if (signatureMatches(jwt, selectedAlg, candidateSecret)) {
+                                // 找到密钥
+                                final String found = candidateSecret;
+                                SwingUtilities.invokeLater(() -> {
+                                    textFieldSecret.setText(found);
+                                    progressBar.setValue(100);
+                                    JOptionPane.showMessageDialog(this,
+                                            I18n.getInstance().format("jwt", "message.bruteFound", found),
+                                            I18n.getInstance().text("jwt", "dialog.found"),
+                                            JOptionPane.INFORMATION_MESSAGE);
+                                });
+                                return;
+                            }
                         } catch (Exception ignored) {
                             // 签名不匹配，继续
                         }
-                        // 更新进度
+                        // 更新进度（仅在百分比变化时刷新，避免逐行 invokeLater 淹没 EDT 事件队列）
                         final int pct = (int) (current * 100 / totalLines);
-                        SwingUtilities.invokeLater(() -> progressBar.setValue(pct));
+                        if (pct != lastPct) {
+                            lastPct = pct;
+                            SwingUtilities.invokeLater(() -> progressBar.setValue(pct));
+                        }
                     }
                 }
                 if (bruteForceRunning) {
                     SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(this,
                             I18n.getInstance().text("jwt", "message.bruteNotFound"),
-                            "Result", JOptionPane.INFORMATION_MESSAGE));
+                            I18n.getInstance().text("jwt", "dialog.result"),
+                            JOptionPane.INFORMATION_MESSAGE));
                 }
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(this,
-                        ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE));
+                        ex.getMessage(),
+                        I18n.getInstance().text("jwt", "dialog.error"),
+                        JOptionPane.ERROR_MESSAGE));
             } finally {
                 bruteForceRunning = false;
                 SwingUtilities.invokeLater(() -> btnStartBrute.setEnabled(true));
@@ -467,6 +479,26 @@ public class JwtPanel extends JPanel {
         }, "jwt-brute-force");
         bruteForceThread.setDaemon(true);
         bruteForceThread.start();
+    }
+
+    /**
+     * 仅校验 JWT 签名是否由给定密钥生成（不校验 exp/nbf 等声明）。
+     * 爆破目标 token 往往已过期，若走 {@code JWT.verify()} 会因声明校验失败
+     * 而把字典里的正确密钥误判为未命中，因此这里只比对签名。
+     */
+    private boolean signatureMatches(String jwt, String algorithmName, String secret) throws Exception {
+        DecodedJWT decoded = JWT.decode(jwt);
+        Algorithm algorithm = resolveAlgorithm(algorithmName, secret);
+        String signingInput = decoded.getHeader() + "." + decoded.getPayload();
+        byte[] expected = algorithm.sign(signingInput.getBytes(StandardCharsets.UTF_8));
+        byte[] actual = Base64.getUrlDecoder().decode(padBase64Url(decoded.getSignature()));
+        return MessageDigest.isEqual(expected, actual);
+    }
+
+    /** base64url 补齐 padding（解码器要求） */
+    private static String padBase64Url(String value) {
+        int padding = (4 - value.length() % 4) % 4;
+        return value + "=".repeat(padding);
     }
 
     /** 停止爆破 */
