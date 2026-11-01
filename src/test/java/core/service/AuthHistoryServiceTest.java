@@ -26,6 +26,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -117,7 +118,8 @@ class AuthHistoryServiceTest {
 
         service.updateToLatestAuth(event, List.of(selected));
 
-        verify(repeater).sendToRepeater(updated, "AuthKit - Updated Auth");
+        // 历史扫描在后台线程执行，结果经 EDT 回调，用 timeout 轮询等待
+        verify(repeater, timeout(2000)).sendToRepeater(updated, "AuthKit - Updated Auth");
         verify(event.messageEditorRequestResponse().get(), never()).setRequest(any());
     }
 

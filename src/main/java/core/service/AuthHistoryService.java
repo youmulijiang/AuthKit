@@ -36,6 +36,7 @@ public class AuthHistoryService {
     /**
      * 从代理历史中查找同 host 下最新的含不同鉴权字段的请求，替换原始请求的鉴权字段后输出。
      * 仅可写 Request 编辑器会直接回写；代理历史等只读视图改为发送到 Repeater。
+     * 历史全量遍历在后台线程执行，避免大历史时阻塞 EDT。
      */
     public void updateToLatestAuth(ContextMenuEvent event, List<HttpRequestResponse> items) {
         if (items == null || items.isEmpty()) return;
@@ -43,46 +44,53 @@ public class AuthHistoryService {
         if (originalRequest == null) return;
         String host = originalRequest.httpService().host();
 
-        List<ProxyHttpRequestResponse> history = montoyaApi.proxy().history();
-        ProxyHttpRequestResponse latest = null;
-        ZonedDateTime latestTime = null;
+        Thread worker = new Thread(() -> {
+            List<ProxyHttpRequestResponse> history = montoyaApi.proxy().history();
+            ProxyHttpRequestResponse found = null;
+            ZonedDateTime latestTime = null;
 
-        for (ProxyHttpRequestResponse item : history) {
-            if (!host.equals(item.host())) continue;
-            boolean hasAuth = false;
-            boolean hasDiff = false;
-            for (HttpHeader header : item.request().headers()) {
-                if (!AuthContextMenuProvider.isAuthHeader(header.name())) continue;
-                hasAuth = true;
-                String origValue = originalRequest.headerValue(header.name());
-                if (!header.value().equals(origValue)) {
-                    hasDiff = true;
+            for (ProxyHttpRequestResponse item : history) {
+                if (!host.equals(item.host())) continue;
+                boolean hasAuth = false;
+                boolean hasDiff = false;
+                for (HttpHeader header : item.request().headers()) {
+                    if (!AuthContextMenuProvider.isAuthHeader(header.name())) continue;
+                    hasAuth = true;
+                    String origValue = originalRequest.headerValue(header.name());
+                    if (!header.value().equals(origValue)) {
+                        hasDiff = true;
+                    }
+                }
+                if (hasAuth && hasDiff) {
+                    ZonedDateTime t = item.time();
+                    if (latestTime == null || (t != null && t.isAfter(latestTime))) {
+                        found = item;
+                        latestTime = t;
+                    }
                 }
             }
-            if (hasAuth && hasDiff) {
-                ZonedDateTime t = item.time();
-                if (latestTime == null || (t != null && t.isAfter(latestTime))) {
-                    latest = item;
-                    latestTime = t;
+
+            final ProxyHttpRequestResponse latest = found;
+            SwingUtilities.invokeLater(() -> {
+                if (latest == null) {
+                    JOptionPane.showMessageDialog(null,
+                            I18n.getInstance().text("auth_context_menu", "dialog.authHistory.noLatest"),
+                            I18n.getInstance().text("auth_context_menu", "menu.updateAuth"),
+                            JOptionPane.INFORMATION_MESSAGE);
+                    return;
                 }
-            }
-        }
-
-        if (latest == null) {
-            JOptionPane.showMessageDialog(null,
-                    I18n.getInstance().text("auth_context_menu", "dialog.authHistory.noLatest"),
-                    I18n.getInstance().text("auth_context_menu", "menu.updateAuth"),
-                    JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-
-        applyAuthHeaders(event, originalRequest, latest.request());
+                applyAuthHeaders(event, originalRequest, latest.request());
+            });
+        }, "authkit-auth-history");
+        worker.setDaemon(true);
+        worker.start();
     }
 
     /**
      * 弹出历史选择对话框，展示全量代理历史（含鉴权字段的请求）。
      * Dialog 内部负责 host/referer/自定义 范围过滤与去重；用户选中后将所选请求的
      * 鉴权字段替换到原始请求。仅可写 Request 编辑器会直接回写，否则发送到 Repeater。
+     * 历史全量遍历在后台线程执行，避免大历史时阻塞 EDT。
      */
     public void selectFromHistory(JComponent parent, ContextMenuEvent event,
                                   List<HttpRequestResponse> items) {
@@ -92,25 +100,31 @@ public class AuthHistoryService {
         String originalHost = originalRequest.httpService().host();
         String originalReferer = originalRequest.headerValue("Referer");
 
-        // 拉取全量代理历史，仅保留含鉴权字段的条目，传给 Dialog 自行过滤
-        List<ProxyHttpRequestResponse> history = montoyaApi.proxy().history();
-        List<ProxyHttpRequestResponse> withAuth = new ArrayList<>();
-        for (ProxyHttpRequestResponse item : history) {
-            if (hasAuthHeaders(item.request())) {
-                withAuth.add(item);
+        Thread worker = new Thread(() -> {
+            // 拉取全量代理历史，仅保留含鉴权字段的条目，传给 Dialog 自行过滤
+            List<ProxyHttpRequestResponse> history = montoyaApi.proxy().history();
+            List<ProxyHttpRequestResponse> withAuth = new ArrayList<>();
+            for (ProxyHttpRequestResponse item : history) {
+                if (hasAuthHeaders(item.request())) {
+                    withAuth.add(item);
+                }
             }
-        }
 
-        if (withAuth.isEmpty()) {
-            JOptionPane.showMessageDialog(null,
-                    I18n.getInstance().text("auth_context_menu", "dialog.authHistory.noHistory"),
-                    I18n.getInstance().text("auth_context_menu", "menu.updateAuth"),
-                    JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-
-        AuthHistorySelectDialog.show(parent, montoyaApi, withAuth, originalHost, originalReferer,
-                selected -> applyAuthHeaders(event, originalRequest, selected.request()));
+            SwingUtilities.invokeLater(() -> {
+                if (withAuth.isEmpty()) {
+                    JOptionPane.showMessageDialog(null,
+                            I18n.getInstance().text("auth_context_menu", "dialog.authHistory.noHistory"),
+                            I18n.getInstance().text("auth_context_menu", "menu.updateAuth"),
+                            JOptionPane.INFORMATION_MESSAGE);
+                    return;
+                }
+                AuthHistorySelectDialog.show(parent, montoyaApi, withAuth, originalHost,
+                        originalReferer,
+                        selected -> applyAuthHeaders(event, originalRequest, selected.request()));
+            });
+        }, "authkit-auth-history");
+        worker.setDaemon(true);
+        worker.start();
     }
 
     /**

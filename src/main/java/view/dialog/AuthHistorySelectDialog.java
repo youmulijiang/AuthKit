@@ -54,6 +54,9 @@ public class AuthHistorySelectDialog extends JDialog {
     private JTextArea authHeadersArea;
     private ScopeMode[] scopeModes;
 
+    /** 过滤输入防抖计时器：避免每次按键都全量遍历代理历史 */
+    private final Timer filterDebounceTimer;
+
     /**
      * 显示对话框（模态，阻塞直到关闭）。
      *
@@ -86,6 +89,8 @@ public class AuthHistorySelectDialog extends JDialog {
         this.originalHost = originalHost != null ? originalHost : "";
         this.originalReferer = originalReferer;
         this.applyHandler = applyHandler;
+        this.filterDebounceTimer = new Timer(200, e -> applyFilters());
+        this.filterDebounceTimer.setRepeats(false);
         this.requestEditor = api.userInterface().createHttpRequestEditor(EditorOptions.READ_ONLY);
         this.responseEditor = api.userInterface().createHttpResponseEditor(EditorOptions.READ_ONLY);
         this.tableModel = new DefaultTableModel(buildColumns(), 0) {
@@ -226,17 +231,17 @@ public class AuthHistorySelectDialog extends JDialog {
         DocumentListener filterListener = new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
-                applyFilters();
+                filterDebounceTimer.restart();
             }
 
             @Override
             public void removeUpdate(DocumentEvent e) {
-                applyFilters();
+                filterDebounceTimer.restart();
             }
 
             @Override
             public void changedUpdate(DocumentEvent e) {
-                applyFilters();
+                filterDebounceTimer.restart();
             }
         };
         filterField.getDocument().addDocumentListener(filterListener);
