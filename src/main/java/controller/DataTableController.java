@@ -81,6 +81,11 @@ public class DataTableController {
                 mainPanel.getPanelDataTable().setUnauthorizedOnly(
                         mainPanel.getPanelConfiguration().getCheckBoxUnauthorizedOnly().isSelected()));
 
+        // 用户重命名/删除时同步历史样本中的鉴权对象数据，避免列名变更后历史报文取不到
+        mainPanel.getPanelUser().onUserRenamed((oldName, newName) ->
+                controller.renameAuthUser(oldName, newName));
+        mainPanel.getPanelUser().onUserRemoved(controller::removeAuthUser);
+
         // 注入越权判定器：基于 RankService 的归一化评分与阈值判定，与表格展示指标无关
         mainPanel.getPanelDataTable().setUnauthorizedChecker(modelRow -> {
             CompareSampleModel sample = controller.getSample(modelRow);
@@ -118,8 +123,9 @@ public class DataTableController {
      * 处理 HttpHandler 捕获的请求：去重、构建原始数据、收集用户重放、刷新表格
      */
     public void handleCapturedRequest(HttpRequest request, HttpResponseReceived response) {
-        // 去重检查：相同 method + url 的请求只处理一次
-        if (!controller.isNewRequest(request.method(), request.url())) {
+        // 去重检查：method + url + 请求体哈希相同的请求只处理一次
+        String bodyHash = requestBodyHash(request);
+        if (!controller.isNewRequest(request.method(), request.url(), bodyHash)) {
             return;
         }
         executor.submit(() -> {
@@ -140,8 +146,8 @@ public class DataTableController {
                     originalData.setNote(response.annotations().notes());
                 }
 
-                // 从 UserPanel 收集启用的用户配置
-                List<AuthUserModel> users = UserPanelBinder.collectUsers(mainPanel.getPanelUser());
+                // 从 UserPanel 收集启用的用户配置（内部切换到 EDT 读取 Swing 状态）
+                List<AuthUserModel> users = UserPanelBinder.collectUsersOnEdt(mainPanel.getPanelUser());
 
                 // 处理请求
                 controller.processRequest(request, response, originalData, users);
@@ -149,9 +155,21 @@ public class DataTableController {
                 // 更新 UI（在 EDT 线程）
                 SwingUtilities.invokeLater(this::refresh);
             } catch (Exception ex) {
+                // 处理失败时撤销去重标记，允许该请求下次被重新捕获
+                controller.forgetRequest(request.method(), request.url(), bodyHash);
                 LogUtils.INSTANCE.error("Error processing request", ex);
             }
         });
+    }
+
+    /** 请求体哈希（十六进制），无请求体返回空串 */
+    private static String requestBodyHash(HttpRequest request) {
+        try {
+            String body = request.bodyToString();
+            return body == null || body.isEmpty() ? "" : Integer.toHexString(HashService.hash(body));
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     /**

@@ -13,7 +13,9 @@ import model.ConfigModel;
 import model.MessageDataModel;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -39,8 +41,11 @@ public class AuthController {
     /** 记录编号计数器 */
     private final AtomicInteger idCounter;
 
-    /** 已处理请求的去重集合（key = method + url） */
+    /** 已处理请求的去重集合（key = method + url [+ body 哈希]） */
     private final Set<String> processedRequests;
+
+    /** 去重集合容量上限：超过后整体清空，防止长时间挂机内存无限增长（代价是可能重复捕获） */
+    private static final int MAX_PROCESSED_REQUESTS = 10_000;
 
     /**
      * 构造核心控制器
@@ -62,15 +67,52 @@ public class AuthController {
     }
 
     /**
-     * 检查请求是否已处理过（去重）
+     * 检查请求是否已处理过（去重，仅按 method + url）
      *
      * @param method HTTP 方法
      * @param url    请求 URL
      * @return true 表示是新请求（未处理过），false 表示重复请求
      */
     public boolean isNewRequest(String method, String url) {
-        String key = method + " " + url;
+        return markProcessed(buildKey(method, url, null));
+    }
+
+    /**
+     * 检查请求是否已处理过（去重，键包含请求体哈希：同一 URL 不同 POST 体视为不同请求）
+     *
+     * @param method   HTTP 方法
+     * @param url      请求 URL
+     * @param bodyHash 请求体哈希（十六进制），无请求体传 null 或空串
+     * @return true 表示是新请求（未处理过），false 表示重复请求
+     */
+    public boolean isNewRequest(String method, String url, String bodyHash) {
+        return markProcessed(buildKey(method, url, bodyHash));
+    }
+
+    /**
+     * 处理失败时撤销去重标记，允许该请求下次被重新捕获处理
+     */
+    public void forgetRequest(String method, String url, String bodyHash) {
+        processedRequests.remove(buildKey(method, url, bodyHash));
+    }
+
+    /** 撤销仅按 method + url 记录的去重标记 */
+    public void forgetRequest(String method, String url) {
+        processedRequests.remove(buildKey(method, url, null));
+    }
+
+    private boolean markProcessed(String key) {
+        if (processedRequests.size() >= MAX_PROCESSED_REQUESTS) {
+            processedRequests.clear();
+        }
         return processedRequests.add(key);
+    }
+
+    private static String buildKey(String method, String url, String bodyHash) {
+        if (bodyHash == null || bodyHash.isEmpty()) {
+            return method + " " + url;
+        }
+        return method + " " + url + " #" + bodyHash;
     }
 
     /**
@@ -92,7 +134,8 @@ public class AuthController {
 
         // 1. 记录原始请求数据，Original 固定 100 分
         originalData.setRank(RankService.ORIGINAL_RANK);
-        sample.putMessageData("Original", originalData);
+        Map<String, MessageDataModel> collected = new LinkedHashMap<>();
+        collected.put("Original", originalData);
 
         // 2. 重放未授权请求
         List<String> authHeaders = configModel.getAuthHeaders();
@@ -102,7 +145,7 @@ public class AuthController {
         unauthData.setBody(unauthReqResp.response() != null
                 ? unauthReqResp.response().bodyToString() : null);
         unauthData.setRank(RankService.calculateRank(originalData, unauthData));
-        sample.putMessageData("Unauthorized", unauthData);
+        collected.put("Unauthorized", unauthData);
 
         // 3. 为每个启用的用户重放请求
         for (AuthUserModel user : users) {
@@ -114,13 +157,44 @@ public class AuthController {
             userData.setBody(userReqResp.response() != null
                     ? userReqResp.response().bodyToString() : null);
             userData.setRank(RankService.calculateRank(originalData, userData));
-            sample.putMessageData(user.getName(), userData);
+            collected.put(user.getName(), userData);
         }
 
+        // 报文写入与样本登记在同一临界区完成，保证与 renameAuthUser/removeAuthUser 互斥
         synchronized (samplesLock) {
+            collected.forEach(sample::putMessageData);
             samples.add(sample);
         }
         return sample;
+    }
+
+    /**
+     * 用户重命名后同步历史样本：将所有已捕获样本中的旧鉴权对象名更新为新名称，
+     * 避免数据表/对比面板按新名称取不到历史报文。
+     */
+    public void renameAuthUser(String oldName, String newName) {
+        if (oldName == null || newName == null || oldName.equals(newName)) {
+            return;
+        }
+        synchronized (samplesLock) {
+            for (CompareSampleModel sample : samples) {
+                sample.renameAuthName(oldName, newName);
+            }
+        }
+    }
+
+    /**
+     * 用户删除后同步历史样本：移除所有已捕获样本中该鉴权对象的报文数据。
+     */
+    public void removeAuthUser(String name) {
+        if (name == null) {
+            return;
+        }
+        synchronized (samplesLock) {
+            for (CompareSampleModel sample : samples) {
+                sample.removeAuthName(name);
+            }
+        }
     }
 
     /**

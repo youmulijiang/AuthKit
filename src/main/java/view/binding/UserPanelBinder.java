@@ -1,12 +1,16 @@
 package view.binding;
 
 import model.AuthUserModel;
+import utils.LogUtils;
 import view.component.AuthUserConfigPanel;
 import view.component.UserPanel;
 
+import javax.swing.*;
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 用户面板 ↔ 用户模型 绑定器（V层）
@@ -20,7 +24,7 @@ public final class UserPanelBinder {
     }
 
     /**
-     * 从 UserPanel 收集所有用户配置
+     * 从 UserPanel 收集所有用户配置（必须在 EDT 上调用）
      *
      * @param userPanel 用户面板
      * @return 鉴权用户模型列表
@@ -37,5 +41,28 @@ public final class UserPanelBinder {
             users.add(user);
         }
         return users;
+    }
+
+    /**
+     * 从 UserPanel 收集所有用户配置（线程安全版本）。
+     * 后台线程（被动捕获 / 右键送测）调用时切换到 EDT 读取 Swing 组件状态，
+     * 避免非 EDT 读组件导致的竞态。
+     *
+     * @param userPanel 用户面板
+     * @return 鉴权用户模型列表（读取失败返回空列表）
+     */
+    public static List<AuthUserModel> collectUsersOnEdt(UserPanel userPanel) {
+        if (SwingUtilities.isEventDispatchThread()) {
+            return collectUsers(userPanel);
+        }
+        AtomicReference<List<AuthUserModel>> holder = new AtomicReference<>(List.of());
+        try {
+            SwingUtilities.invokeAndWait(() -> holder.set(collectUsers(userPanel)));
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+        } catch (InvocationTargetException ex) {
+            LogUtils.INSTANCE.error("Failed to collect users from UserPanel", ex);
+        }
+        return holder.get();
     }
 }

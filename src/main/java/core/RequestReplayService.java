@@ -70,7 +70,8 @@ public class RequestReplayService {
     }
 
     /**
-     * 从请求响应对中构建 MessageDataModel
+     * 从请求响应对中构建 MessageDataModel。
+     * 重放失败（如目标不可达）时 response 可能为 null，各字段回退为空值，避免 NPE 丢样本。
      *
      * @param requestResponse 请求响应对
      * @return 报文数据模型
@@ -79,12 +80,13 @@ public class RequestReplayService {
         HttpRequest request = requestResponse.request();
         HttpResponse response = requestResponse.response();
 
-        String requestStr = request.toString();
-        String responseStr = response.toString();
-        int statusCode = response.statusCode();
-        int length = response.bodyToString().length();
-        int hash = HashService.hash(response.bodyToString());
-        int attributeCount = response.attributes().size();
+        String requestStr = request != null ? request.toString() : "";
+        String responseStr = response != null ? response.toString() : "";
+        String body = response != null ? response.bodyToString() : "";
+        int statusCode = response != null ? response.statusCode() : 0;
+        int length = body.length();
+        int hash = HashService.hash(body);
+        int attributeCount = response != null ? response.attributes().size() : 0;
 
         // 从 HttpRequestResponse 获取 annotations notes
         String note = "";
@@ -93,10 +95,10 @@ public class RequestReplayService {
         }
 
         // 从响应头获取 Content-Type
-        String contentType = response.headerValue("Content-Type");
+        String contentType = response != null ? response.headerValue("Content-Type") : null;
 
         MessageDataModel model = new MessageDataModel(requestStr, responseStr, statusCode, length, hash, request, response);
-        model.setBody(response.bodyToString());
+        model.setBody(body);
         model.setAttributeCount(attributeCount);
         model.setNote(note);
         model.setContentType(contentType != null ? contentType : "");

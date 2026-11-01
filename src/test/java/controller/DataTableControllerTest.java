@@ -44,7 +44,7 @@ class DataTableControllerTest {
         HttpResponseReceived response = mock(HttpResponseReceived.class);
         when(request.method()).thenReturn("GET");
         when(request.url()).thenReturn("http://example.com/api");
-        when(controller.isNewRequest("GET", "http://example.com/api")).thenReturn(false);
+        when(controller.isNewRequest(eq("GET"), eq("http://example.com/api"), any())).thenReturn(false);
 
         dataTableController.handleCapturedRequest(request, response);
 
@@ -58,7 +58,7 @@ class DataTableControllerTest {
         HttpResponseReceived response = mock(HttpResponseReceived.class);
         when(request.method()).thenReturn("GET");
         when(request.url()).thenReturn("http://example.com/api");
-        when(controller.isNewRequest("GET", "http://example.com/api")).thenReturn(true);
+        when(controller.isNewRequest(eq("GET"), eq("http://example.com/api"), any())).thenReturn(true);
 
         dataTableController.handleCapturedRequest(request, response);
 

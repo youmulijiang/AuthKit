@@ -91,6 +91,39 @@ public class CompareSampleModel {
     }
 
     /**
+     * 重命名鉴权对象（保持插入顺序）。
+     * 用户重命名后调用，使历史样本可继续按新名称取到报文数据。
+     *
+     * @param oldName 旧名称
+     * @param newName 新名称
+     */
+    public void renameAuthName(String oldName, String newName) {
+        if (oldName == null || newName == null || oldName.equals(newName)) {
+            return;
+        }
+        if (!messageDataMap.containsKey(oldName)) {
+            return;
+        }
+        LinkedHashMap<String, MessageDataModel> reordered = new LinkedHashMap<>();
+        for (Map.Entry<String, MessageDataModel> entry : messageDataMap.entrySet()) {
+            reordered.put(oldName.equals(entry.getKey()) ? newName : entry.getKey(), entry.getValue());
+        }
+        messageDataMap.clear();
+        messageDataMap.putAll(reordered);
+    }
+
+    /**
+     * 删除鉴权对象（用户被移除后调用，同步清理历史样本中的对应数据）
+     *
+     * @param authName 鉴权对象名称
+     */
+    public void removeAuthName(String authName) {
+        if (authName != null) {
+            messageDataMap.remove(authName);
+        }
+    }
+
+    /**
      * 获取所有鉴权对象名称
      *
      * @return 鉴权对象名称集合

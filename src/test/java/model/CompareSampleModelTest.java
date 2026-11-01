@@ -123,5 +123,50 @@ class CompareSampleModelTest {
 
         assertEquals(500, sample.getValueByAuthName("Original", "UnknownMetric"));
     }
-}
 
+
+    @Test
+    @DisplayName("renameAuthName 应保持插入顺序并可按新名称取到数据")
+    void renameAuthName_shouldPreserveOrderAndData() {
+        CompareSampleModel sample = new CompareSampleModel(1, "GET", "/api/test");
+        MessageDataModel original = new MessageDataModel("req1", "resp1", 200, 500, 1001);
+        MessageDataModel user1 = new MessageDataModel("req2", "resp2", 200, 480, 1002);
+
+        sample.putMessageData("Original", original);
+        sample.putMessageData("User1", user1);
+
+        sample.renameAuthName("User1", "admin");
+
+        assertEquals(original, sample.getMessageData("Original"));
+        assertEquals(user1, sample.getMessageData("admin"));
+        assertNull(sample.getMessageData("User1"));
+        // 顺序保持：Original 仍在首位
+        assertEquals("Original", sample.getAuthNamesOrdered().get(0));
+        assertEquals("admin", sample.getAuthNamesOrdered().get(1));
+    }
+
+    @Test
+    @DisplayName("renameAuthName 对不存在的名称应为无操作")
+    void renameAuthName_nonExistentKey_shouldBeNoOp() {
+        CompareSampleModel sample = new CompareSampleModel(1, "GET", "/api/test");
+        sample.putMessageData("Original", new MessageDataModel("req", "resp", 200, 10, 1));
+
+        sample.renameAuthName("Ghost", "admin");
+
+        assertEquals(1, sample.getAuthNames().size());
+        assertTrue(sample.getAuthNames().contains("Original"));
+    }
+
+    @Test
+    @DisplayName("removeAuthName 应移除指定鉴权对象数据")
+    void removeAuthName_shouldRemoveData() {
+        CompareSampleModel sample = new CompareSampleModel(1, "GET", "/api/test");
+        sample.putMessageData("Original", new MessageDataModel("req1", "resp1", 200, 10, 1));
+        sample.putMessageData("User1", new MessageDataModel("req2", "resp2", 200, 20, 2));
+
+        sample.removeAuthName("User1");
+
+        assertNull(sample.getMessageData("User1"));
+        assertNotNull(sample.getMessageData("Original"));
+    }
+}

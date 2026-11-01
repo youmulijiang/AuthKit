@@ -236,42 +236,66 @@ public class ContextMenuController {
      */
     private void processContextMenuRequest(HttpRequestResponse reqResp) {
         HttpRequest request = reqResp.request();
-        HttpResponse response = reqResp.response();
-
-        // 如果没有响应，先发送请求获取响应
-        if (response == null) {
-            response = replayService.sendRaw(request);
-        }
-
-        // 去重检查
-        if (!controller.isNewRequest(request.method(), request.url())) {
+        if (request == null) {
             return;
         }
+        String bodyHash = requestBodyHash(request);
+        try {
+            // 去重检查前置：避免对已处理过的条目白白发一次原始请求
+            if (!controller.isNewRequest(request.method(), request.url(), bodyHash)) {
+                return;
+            }
 
-        // 构建原始报文数据
-        MessageDataModel originalData = new MessageDataModel(
-                request.toString(), response.toString(),
-                response.statusCode(),
-                response.bodyToString().length(),
-                HashService.hash(response.bodyToString()),
-                request, response
-        );
-        originalData.setContentType(response.headerValue("Content-Type") != null
-                ? response.headerValue("Content-Type") : "");
-        // 从右键菜单选中条目的 annotations 读取 Burp 备注
-        if (reqResp.annotations() != null && reqResp.annotations().hasNotes()) {
-            originalData.setNote(reqResp.annotations().notes());
+            // 如果没有响应，先发送请求获取响应
+            HttpResponse response = reqResp.response();
+            if (response == null) {
+                response = replayService.sendRaw(request);
+            }
+            // 发送失败拿不到响应：撤销去重标记后放弃，交由用户重试
+            if (response == null) {
+                controller.forgetRequest(request.method(), request.url(), bodyHash);
+                return;
+            }
+
+            // 构建原始报文数据
+            MessageDataModel originalData = new MessageDataModel(
+                    request.toString(), response.toString(),
+                    response.statusCode(),
+                    response.bodyToString().length(),
+                    HashService.hash(response.bodyToString()),
+                    request, response
+            );
+            originalData.setContentType(response.headerValue("Content-Type") != null
+                    ? response.headerValue("Content-Type") : "");
+            // 从右键菜单选中条目的 annotations 读取 Burp 备注
+            if (reqResp.annotations() != null && reqResp.annotations().hasNotes()) {
+                originalData.setNote(reqResp.annotations().notes());
+            }
+
+            // 收集所有鉴权用户（内部切换到 EDT 读取 Swing 状态）
+            List<AuthUserModel> users =
+                    view.binding.UserPanelBinder.collectUsersOnEdt(mainPanel.getPanelUser());
+
+            // 处理请求
+            controller.processRequest(request, response, originalData, users);
+
+            // 更新 UI
+            SwingUtilities.invokeLater(refreshDataTableCallback);
+        } catch (Exception ex) {
+            // 处理失败时撤销去重标记，允许该请求下次被重新发送处理
+            controller.forgetRequest(request.method(), request.url(), bodyHash);
+            LogUtils.INSTANCE.error("Error processing context menu request", ex);
         }
+    }
 
-        // 收集所有鉴权用户
-        List<AuthUserModel> users = view.binding.UserPanelBinder.collectUsers(mainPanel.getPanelUser());
-
-        // 处理请求
-        final HttpResponse finalResponse = response;
-        controller.processRequest(request, finalResponse, originalData, users);
-
-        // 更新 UI
-        SwingUtilities.invokeLater(refreshDataTableCallback);
+    /** 请求体哈希（十六进制），无请求体返回空串 */
+    private static String requestBodyHash(HttpRequest request) {
+        try {
+            String body = request.bodyToString();
+            return body == null || body.isEmpty() ? "" : Integer.toHexString(HashService.hash(body));
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     /**

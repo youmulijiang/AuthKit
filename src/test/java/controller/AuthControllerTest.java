@@ -210,5 +210,93 @@ class AuthControllerTest {
         controller.clearAll();
         assertTrue(controller.getSamples().isEmpty());
     }
-}
 
+
+    @Test
+    @DisplayName("isNewRequest 三参重载应将相同 method+url+body 视为重复，不同 body 视为新请求")
+    void isNewRequest_withBodyHash_shouldDeduplicateByBody() {
+        String bodyHashA = Integer.toHexString("body-a".hashCode());
+        String bodyHashB = Integer.toHexString("body-b".hashCode());
+
+        assertTrue(controller.isNewRequest("POST", "http://example.com/api", bodyHashA));
+        assertFalse(controller.isNewRequest("POST", "http://example.com/api", bodyHashA));
+        // 同 URL 不同请求体：不应被去重拦截
+        assertTrue(controller.isNewRequest("POST", "http://example.com/api", bodyHashB));
+        // 无请求体（空串）与两参重载等价
+        assertTrue(controller.isNewRequest("POST", "http://example.com/api", ""));
+        assertFalse(controller.isNewRequest("POST", "http://example.com/api"));
+    }
+
+    @Test
+    @DisplayName("forgetRequest 应撤销去重标记，允许失败请求重新被处理")
+    void forgetRequest_shouldAllowReprocessing() {
+        String bodyHash = Integer.toHexString("body".hashCode());
+        assertTrue(controller.isNewRequest("POST", "http://example.com/api", bodyHash));
+        assertFalse(controller.isNewRequest("POST", "http://example.com/api", bodyHash));
+
+        controller.forgetRequest("POST", "http://example.com/api", bodyHash);
+
+        assertTrue(controller.isNewRequest("POST", "http://example.com/api", bodyHash));
+    }
+
+    @Test
+    @DisplayName("renameAuthUser 应同步所有历史样本的鉴权对象名称")
+    void renameAuthUser_shouldRenameAcrossSamples() {
+        HttpRequest request = mock(HttpRequest.class);
+        HttpResponse response = mock(HttpResponse.class);
+        when(request.method()).thenReturn("GET");
+        when(request.url()).thenReturn("http://example.com/rename");
+
+        HttpRequestResponse unauthReqResp = mock(HttpRequestResponse.class);
+        when(replayService.replayUnauthorized(eq(request), anyList())).thenReturn(unauthReqResp);
+        when(replayService.buildMessageData(unauthReqResp))
+                .thenReturn(new MessageDataModel("r", "r", 200, 10, 5001));
+
+        AuthUserModel user = new AuthUserModel("User1");
+        HttpRequestResponse userReqResp = mock(HttpRequestResponse.class);
+        when(replayService.replay(request, user)).thenReturn(userReqResp);
+        MessageDataModel userData = new MessageDataModel("r1", "r1", 200, 20, 5002);
+        when(replayService.buildMessageData(userReqResp)).thenReturn(userData);
+
+        MessageDataModel originalData = new MessageDataModel("req", "resp", 200, 100, 5003);
+        CompareSampleModel sample = controller.processRequest(request, response, originalData, List.of(user));
+
+        controller.renameAuthUser("User1", "admin");
+
+        assertNull(sample.getMessageData("User1"));
+        assertSame(userData, sample.getMessageData("admin"));
+        // 顺序保持：Original / Unauthorized / 重命名后的 admin
+        assertEquals("Original", sample.getAuthNamesOrdered().get(0));
+        assertEquals("Unauthorized", sample.getAuthNamesOrdered().get(1));
+        assertEquals("admin", sample.getAuthNamesOrdered().get(2));
+    }
+
+    @Test
+    @DisplayName("removeAuthUser 应从所有历史样本中移除该鉴权对象数据")
+    void removeAuthUser_shouldRemoveAcrossSamples() {
+        HttpRequest request = mock(HttpRequest.class);
+        HttpResponse response = mock(HttpResponse.class);
+        when(request.method()).thenReturn("GET");
+        when(request.url()).thenReturn("http://example.com/remove");
+
+        HttpRequestResponse unauthReqResp = mock(HttpRequestResponse.class);
+        when(replayService.replayUnauthorized(eq(request), anyList())).thenReturn(unauthReqResp);
+        when(replayService.buildMessageData(unauthReqResp))
+                .thenReturn(new MessageDataModel("r", "r", 200, 10, 6001));
+
+        AuthUserModel user = new AuthUserModel("User1");
+        HttpRequestResponse userReqResp = mock(HttpRequestResponse.class);
+        when(replayService.replay(request, user)).thenReturn(userReqResp);
+        when(replayService.buildMessageData(userReqResp))
+                .thenReturn(new MessageDataModel("r1", "r1", 200, 20, 6002));
+
+        MessageDataModel originalData = new MessageDataModel("req", "resp", 200, 100, 6003);
+        CompareSampleModel sample = controller.processRequest(request, response, originalData, List.of(user));
+
+        controller.removeAuthUser("User1");
+
+        assertNull(sample.getMessageData("User1"));
+        assertNotNull(sample.getMessageData("Original"));
+        assertNotNull(sample.getMessageData("Unauthorized"));
+    }
+}
