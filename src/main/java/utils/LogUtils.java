@@ -12,8 +12,8 @@ public enum LogUtils {
     /** 单例实例 */
     INSTANCE;
 
-    /** 日志开关，默认开启 */
-    private volatile boolean enabled = false;
+    /** 日志开关，默认开启（info/debug 级别受此开关控制） */
+    private volatile boolean enabled = true;
 
     /** 调试日志开关，默认关闭 */
     private volatile boolean debugEnabled = false;
@@ -25,6 +25,19 @@ public enum LogUtils {
      */
     private Logging logging() {
         return ApiUtils.INSTANCE.api().logging();
+    }
+
+    /**
+     * Montoya API 是否已初始化。
+     * error 级别日志不受开关限制，但 API 未就绪（如单测环境）时静默跳过，避免次生异常。
+     */
+    private boolean apiAvailable() {
+        try {
+            ApiUtils.INSTANCE.api();
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**
@@ -129,26 +142,30 @@ public enum LogUtils {
     }
 
     /**
-     * 输出错误日志到 Burp Error 面板
+     * 输出错误日志到 Burp Error 面板。
+     * error 级别不受 enabled 开关限制：故障信息必须始终可见，避免静默吞掉异常。
      *
      * @param message 错误信息
      */
     public void error(String message) {
-        if (enabled) {
+        if (apiAvailable()) {
             logging().logToError("[ERROR] " + message);
         }
     }
 
     /**
-     * 输出带异常的错误日志到 Burp Error 面板
+     * 输出带异常的错误日志到 Burp Error 面板。
+     * error 级别不受 enabled 开关限制：故障信息必须始终可见，避免静默吞掉异常。
      *
      * @param message   错误信息
      * @param throwable 异常对象
      */
     public void error(String message, Throwable throwable) {
-        if (enabled) {
-            logging().logToError("[ERROR] " + message + " | " + throwable.getMessage());
-            logging().logToError(throwable);
+        if (!apiAvailable()) {
+            return;
         }
+        Logging logging = logging();
+        logging.logToError("[ERROR] " + message + " | " + throwable.getMessage());
+        logging.logToError(throwable);
     }
 }
